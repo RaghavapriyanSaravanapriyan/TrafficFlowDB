@@ -47,7 +47,7 @@ class FleetManager:
             self.target = max(0, min(int(count), 2000))
         if interval is not None:
             self.interval = max(0.5, min(float(interval), 30))
-        self._reconcile(sync=True)
+        self._reconcile()
         return self.status()
 
     def status(self) -> dict:
