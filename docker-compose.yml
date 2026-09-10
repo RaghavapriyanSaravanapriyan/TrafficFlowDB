@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: trafficflowdb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: trafficflowdb
+      POSTGRES_USER: traffic
+      POSTGRES_PASSWORD: trafficpass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U traffic -d trafficflowdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    container_name: trafficflowdb-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://traffic:trafficpass@db:5432/trafficflowdb
+      TRAFFIC_WINDOW_MINUTES: 5
+      POLL_SECONDS: 2
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./frontend:/app/frontend:ro
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000
+
+volumes:
+  pgdata:
