@@ -9,9 +9,9 @@ from __future__ import annotations
 import asyncio
 import time
 
-from ..database import get_pool
-from ..services.ingest_bulk import bulk_ingest
-from .vehicle_simulator import Vehicle, build_graph, plan_trip
+from backend.database import get_pool
+from backend.services.ingest_bulk import bulk_ingest
+from simulator.vehicle_simulator import Vehicle, build_graph, plan_trip
 
 
 class FleetManager:
@@ -86,15 +86,13 @@ class FleetManager:
         if not self.enabled:
             self.vehicles = []
             return
-        seg_by_id = {s["id"]: s for s in (segments or [])}
-        while len(self.vehicles) < self.target:
-            pool = segments or []
-            try:
-                self.vehicles.append(Vehicle(pool, seg_by_id=seg_by_id or None))
-            except Exception:
-                break  # empty network — retry next reconcile
         if len(self.vehicles) > self.target:
             del self.vehicles[self.target:]
+        if not segments:
+            return  # no network snapshot yet — background tick retries
+        seg_by_id = {s["id"]: s for s in segments}
+        while len(self.vehicles) < self.target:
+            self.vehicles.append(Vehicle(segments, seg_by_id=seg_by_id))
 
     async def _loop(self):
         ticks = 0
