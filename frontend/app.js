@@ -4,8 +4,8 @@
 
 const API = "";
 const COLORS = { LOW: "#30d158", MEDIUM: "#ffd60a", HIGH: "#ff453a" };
+const VEH_COLORS = { car: "#0071e3", bus: "#ff9f0a", emergency: "#ff453a" };
 const INDIA_VIEW = { c: [22.8, 79.5], z: 5 };
-const CBE_VIEW = { c: [11.03, 76.98], z: 12 };
 
 const $ = (id) => document.getElementById(id);
 let POLL_MS = 2000;
@@ -41,14 +41,6 @@ const map = L.map("map", { zoomControl: true, worldCopyJump: true })
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
 }).addTo(map);
-$("viewIndia").addEventListener("click", () => {
-  $("viewIndia").classList.add("active"); $("viewCbe").classList.remove("active");
-  map.flyTo(INDIA_VIEW.c, INDIA_VIEW.z, { duration: 1.2 });
-});
-$("viewCbe").addEventListener("click", () => {
-  $("viewCbe").classList.add("active"); $("viewIndia").classList.remove("active");
-  map.flyTo(CBE_VIEW.c, CBE_VIEW.z, { duration: 1.2 });
-});
 
 const segLines = new Map();
 const nodeMarkers = new Map();
@@ -108,7 +100,7 @@ function optGroups(list) {
   const met = list.filter((n) => n.scope !== "national");
   const g = (t, arr) => arr.length
     ? `<optgroup label="${t}">${arr.map((n) => `<option value="${n.id}">${n.name}</option>`).join("")}</optgroup>` : "";
-  return g("National hubs", nat) + g("Coimbatore metro", met);
+  return g("National hubs", nat) + g("Other places", met);
 }
 async function loadNetwork() {
   [nodes, segments] = await Promise.all([
@@ -120,7 +112,7 @@ async function loadNetwork() {
   src.value = 101; dst.value = 124; // Delhi -> Mumbai showcase
   $("jamSel").innerHTML = segments
     .map((s) => `<option value="${s.id}">#${s.id} ${s.name}</option>`).join("");
-  $("jamSel").value = 35;
+  $("jamSel").value = 45;
   $("netSub").textContent =
     `${nodes.length} intersections · ${segments.length} segments · one row per segment, updated on every GPS fix.`;
   for (const n of nodes) {
@@ -163,9 +155,9 @@ function renderPositions(rows) {
   for (const p of rows.slice(0, 400)) {
     L.circleMarker([p.latitude, p.longitude], {
       radius: 3.5, color: "#1d1d1f", weight: 1.5,
-      fillColor: p.vehicle_type === "emergency" ? "#ff453a" : "#0071e3",
+      fillColor: VEH_COLORS[p.vehicle_type] || VEH_COLORS.car,
       fillOpacity: 0.95,
-    }).bindTooltip(`${p.vehicle_number} · ${Math.round(p.speed_kmh)} km/h`).addTo(vehicleLayer);
+    }).bindTooltip(`${p.vehicle_number} · ${p.vehicle_type} · ${Math.round(p.speed_kmh)} km/h`).addTo(vehicleLayer);
   }
 }
 function renderStats(s, cong) {
@@ -175,22 +167,15 @@ function renderStats(s, cong) {
   tweenNum($("hsRoutes"), s.routes_computed);
   $("hsQuery").textContent = s.query_ms + " ms";
 }
-let scopeFilter = "ALL";
 function renderTable() {
-  const rows = lastTraffic.filter((t) => scopeFilter === "ALL" ||
-    (scopeFilter === "metro" ? t.scope !== "trunk" : t.scope === "trunk"));
-  $("netBody").innerHTML = rows.map((t) => `
+  $("netBody").innerHTML = lastTraffic.map((t) => `
     <tr><td>${t.segment_name}</td>
     <td><span class="scope-tag ${t.scope}">${t.scope}</span></td>
     <td>${t.distance_km}</td><td>${Number(t.average_speed).toFixed(0)}</td>
     <td>${t.vehicle_count}</td><td>${Number(t.density).toFixed(2)}</td>
     <td><span class="pill ${t.congestion_level}">${t.congestion_level}</span></td></tr>`).join("");
 }
-document.querySelectorAll("#network .seg-toggle button").forEach((b) =>
-  b.addEventListener("click", () => {
-    document.querySelectorAll("#network .seg-toggle button").forEach((x) => x.classList.remove("active"));
-    b.classList.add("active"); scopeFilter = b.dataset.scope; renderTable();
-  }));
+/* ---- boot + live loops ----------------------------------------------------------------------- */
 
 async function pollOnce() {
   try {
@@ -345,6 +330,7 @@ async function loadFleet() {
     $("fleetOn").checked = f.enabled;
     $("fleetRange").value = f.target;
     $("fleetVal").textContent = f.target;
+    $("fleetLive").textContent = f.enabled ? `${f.alive} live` : "";
     $("fleetNote").textContent = f.enabled
       ? `Running: ${f.alive} vehicles live${f.last.ingested ? `, last tick ${f.last.ingested} fixes in ${f.last.ms} ms` : ""}.`
       : "Spawns/retires live to the target — OD trips through the bulk ingest path. No terminal process needed.";
@@ -355,10 +341,12 @@ $("fleetApply").addEventListener("click", async () => {
     const f = await postJSON("/api/fleet", {
       enabled: $("fleetOn").checked, count: Number($("fleetRange").value),
     });
+    $("fleetLive").textContent = f.enabled ? `${f.alive} live` : "";
     $("fleetNote").textContent = f.enabled
-      ? `Running: ${f.alive} vehicles live.`
+      ? `Running — spawning toward ${f.target} vehicles.`
       : "Fleet stopped and retired.";
     toast(f.enabled ? `Fleet → ${f.target} vehicles` : "Fleet stopped");
+    pollOnce(); // site-wide counts refresh immediately, not next tick
   } catch (e) { toast("Fleet failed: " + e.message); }
 });
 /* (NL console rendering retired in favor of SQL Lab — /api/command stays available.) */
@@ -425,18 +413,21 @@ $("jamFire").addEventListener("click", async () => {
       segment_id: Number($("jamSel").value), count: Number($("jamCount").value),
     });
     toast(`Jam on ${r.segment} → ${r.traffic.congestion}`);
+    pollOnce();
   } catch (e) { toast("Jam failed: " + e.message); }
 });
 $("rushFire").addEventListener("click", async () => {
   try {
     const r = await postJSON("/api/scenarios/rush-hour", {});
     toast(`Rush hour: ${r.injected} vehicles on ${r.segments} corridors`);
+    pollOnce();
   } catch (e) { toast("Failed: " + e.message); }
 });
 $("resetFire").addEventListener("click", async () => {
   try {
     const r = await postJSON("/api/scenarios/reset", {});
     toast(`Cleared ${r.removed_scenario_vehicles} scenario vehicles`);
+    pollOnce();
   } catch (e) { toast("Failed: " + e.message); }
 });
 
@@ -462,9 +453,12 @@ document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
     return;
   }
   await pollOnce();
-  setInterval(pollOnce, POLL_MS);
+  (function schedulePoll() { // re-reads POLL_MS every cycle: refresh slider takes effect live
+    setTimeout(async () => { await pollOnce(); schedulePoll(); }, POLL_MS);
+  })();
   setInterval(async () => { // keep poll cadence + logs fresh even if WS drops
     try { appendLogs((await getJSON("/api/logs?limit=25")).logs); } catch { /* ignore */ }
   }, 5000);
   connectWS();
+  if (new URLSearchParams(location.search).get("drawer") === "1") openDrawer(true);
 })();

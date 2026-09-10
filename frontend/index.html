@@ -78,18 +78,19 @@
     <div class="card-head">
       <div>
         <h2>Live map</h2>
-        <p>27 national hubs + the Coimbatore metro. Roads glow with real congestion; dots are vehicles, right now.</p>
+        <p>26 national hubs · 33 live corridors. Roads glow with real congestion; dots are vehicles, right now.</p>
       </div>
       <div class="map-tools">
-        <div class="seg-toggle" role="tablist">
-          <button class="active" id="viewIndia">India</button>
-          <button id="viewCbe">Coimbatore</button>
-        </div>
         <div class="legend">
           <span><i class="sw low"></i>Free</span>
           <span><i class="sw med"></i>Busy</span>
           <span><i class="sw high"></i>Jammed</span>
           <span><i class="sw route"></i>Your route</span>
+        </div>
+        <div class="legend dim">
+          <span><i class="vd car"></i>Cars</span>
+          <span><i class="vd bus"></i>Buses</span>
+          <span><i class="vd emg"></i>Emergency</span>
         </div>
       </div>
     </div>
@@ -130,7 +131,7 @@
     <div class="card-head">
       <div>
         <h2>Fastest route, not shortest.</h2>
-        <p>Edge weights are live travel times from the database — Delhi to Gandhipuram in one query.</p>
+        <p>Edge weights are live travel times from the database — Delhi to Kochi in one query.</p>
       </div>
     </div>
     <div class="planner-grid">
@@ -147,12 +148,7 @@
     <div class="card-head">
       <div>
         <h2>Network</h2>
-        <p id="netSub">39 intersections · 54 segments · one row per segment, updated on every GPS fix.</p>
-      </div>
-      <div class="seg-toggle light" role="tablist">
-        <button class="active" data-scope="ALL">All</button>
-        <button data-scope="metro">Metro</button>
-        <button data-scope="trunk">Trunk</button>
+        <p id="netSub">Loading corridors…</p>
       </div>
     </div>
     <div class="table-wrap">
@@ -170,51 +166,63 @@
 
 <!-- Customize drawer -->
 <div class="scrim" id="scrim" hidden></div>
-<aside class="drawer glass" id="drawer" aria-label="Customize">
+<aside class="drawer glass closed" id="drawer" aria-label="Customize">
   <div class="drawer-head">
     <h3>Customize</h3>
     <button class="icon-btn" id="drawerClose" aria-label="Close">✕</button>
   </div>
 
-  <h4>Live pipeline</h4>
-  <label class="slider">Traffic window <b id="winVal">5 min</b>
-    <input type="range" id="winRange" min="1" max="15" step="1" value="5" />
-  </label>
-  <label class="slider">Dashboard refresh <b id="pollVal">2.0 s</b>
-    <input type="range" id="pollRange" min="1" max="10" step="0.5" value="2" />
-  </label>
-
-  <h4>Congestion rulebook</h4>
-  <div class="thresh-grid">
-    <label>HIGH below <input type="number" id="thHs" step="1" /> km/h</label>
-    <label>HIGH above <input type="number" id="thHd" step="0.05" min="0" max="5" /> density</label>
-    <label>MED below <input type="number" id="thMs" step="1" /> km/h</label>
-    <label>MED above <input type="number" id="thMd" step="0.05" min="0" max="5" /> density</label>
+  <div class="dsec">
+    <h4>Live pipeline</h4>
+    <div class="field">
+      <div class="flabel"><span>Traffic window</span><b id="winVal">5 min</b></div>
+      <input type="range" id="winRange" min="1" max="15" step="1" value="5" />
+    </div>
+    <div class="field">
+      <div class="flabel"><span>Dashboard refresh</span><b id="pollVal">2.0 s</b></div>
+      <input type="range" id="pollRange" min="1" max="10" step="0.5" value="2" />
+    </div>
   </div>
-  <button class="btn primary wide" id="cfgApply">Apply configuration</button>
-  <p class="drawer-note" id="cfgNote">Thresholds live in PostgreSQL (<code>traffic_thresholds</code>) — applying rewrites them and recomputes every segment.</p>
 
-  <h4>Vehicle fleet (built in)</h4>
-  <label class="check"><input type="checkbox" id="fleetOn" /> Run server-side fleet</label>
-  <label class="slider">Vehicles <b id="fleetVal">0</b>
-    <input type="range" id="fleetRange" min="0" max="500" step="10" value="0" />
-  </label>
-  <button class="btn primary wide" id="fleetApply">Apply fleet</button>
-  <p class="drawer-note" id="fleetNote">Spawns/retires live to the target — OD trips through the bulk ingest path. No terminal process needed.</p>
+  <div class="dsec">
+    <h4>Congestion rulebook</h4>
+    <div class="grid2">
+      <div class="field"><div class="flabel"><span>HIGH below</span><span>km/h</span></div><input type="number" id="thHs" step="1" /></div>
+      <div class="field"><div class="flabel"><span>HIGH above</span><span>density</span></div><input type="number" id="thHd" step="0.05" min="0" max="5" /></div>
+      <div class="field"><div class="flabel"><span>MED below</span><span>km/h</span></div><input type="number" id="thMs" step="1" /></div>
+      <div class="field"><div class="flabel"><span>MED above</span><span>density</span></div><input type="number" id="thMd" step="0.05" min="0" max="5" /></div>
+    </div>
+    <button class="btn primary block" id="cfgApply">Apply configuration</button>
+    <p class="drawer-note" id="cfgNote">Thresholds live in PostgreSQL (<code>traffic_thresholds</code>) — applying rewrites them and recomputes every segment.</p>
+  </div>
 
-  <h4>Traffic scenarios</h4>
-  <label>Jam a road
-    <select id="jamSel"></select>
-  </label>
-  <div class="row">
-    <label>Vehicles <input type="number" id="jamCount" value="30" min="1" max="200" /></label>
-    <button class="btn" id="jamFire">Cause jam</button>
+  <div class="dsec">
+    <h4>Vehicle fleet (built in)</h4>
+    <label class="switch-row"><input type="checkbox" id="fleetOn" /><span>Run server-side fleet</span><b id="fleetLive"></b></label>
+    <div class="field">
+      <div class="flabel"><span>Vehicles</span><b id="fleetVal">0</b></div>
+      <input type="range" id="fleetRange" min="0" max="500" step="10" value="0" />
+    </div>
+    <button class="btn primary block" id="fleetApply">Apply fleet</button>
+    <p class="drawer-note" id="fleetNote">Spawns/retires live to the target — OD trips through the bulk ingest path. No terminal process needed.</p>
   </div>
-  <div class="row">
-    <button class="btn" id="rushFire">Rush hour everywhere</button>
-    <button class="btn danger" id="resetFire">Reset to free flow</button>
+
+  <div class="dsec">
+    <h4>Traffic scenarios</h4>
+    <div class="field">
+      <div class="flabel"><span>Jam a road</span></div>
+      <select id="jamSel"></select>
+    </div>
+    <div class="split">
+      <div class="field"><div class="flabel"><span>Vehicles</span></div><input type="number" id="jamCount" value="30" min="1" max="200" /></div>
+      <div class="field"><div class="flabel"><span>&nbsp;</span></div><button class="btn block" id="jamFire">Cause jam</button></div>
+    </div>
+    <div class="split">
+      <div class="field"><div class="flabel"><span>&nbsp;</span></div><button class="btn block" id="rushFire">Rush hour</button></div>
+      <div class="field"><div class="flabel"><span>&nbsp;</span></div><button class="btn danger block" id="resetFire">Reset</button></div>
+    </div>
+    <p class="drawer-note">Scenarios inject through the normal GPS ingest path — the map, logs and router react exactly like real traffic.</p>
   </div>
-  <p class="drawer-note">Scenarios inject through the normal GPS ingest path — the map, logs and router react exactly like real traffic.</p>
 </aside>
 
 <div class="toast" id="toast" hidden></div>
