@@ -14,9 +14,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from . import querylog, runtime
 from .config import settings
 from .database import close_pool, get_pool, init_db, wait_for_db
-from .routes import gps, network, routing, stats, traffic, vehicles
+from .routes import command, config, gps, logs, network, routing, scenarios, stats, traffic, vehicles
 
 FRONTEND_DIR = pathlib.Path(__file__).resolve().parent.parent / "frontend"
 
@@ -25,11 +26,13 @@ FRONTEND_DIR = pathlib.Path(__file__).resolve().parent.parent / "frontend"
 async def lifespan(app: FastAPI):
     wait_for_db()
     init_db(seed=True)
+    querylog.log("NET", "lifespan: schema + seed + migrations applied", 0,
+                 "API ready")
     yield
     close_pool()
 
 
-app = FastAPI(title="TrafficFlowDB", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="TrafficFlowDB", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,7 +42,8 @@ app.add_middleware(
 )
 
 for router in (gps.router, vehicles.router, traffic.router,
-               network.router, routing.router, stats.router):
+               network.router, routing.router, stats.router,
+               config.router, scenarios.router, command.router, logs.router):
     app.include_router(router)
 
 
@@ -51,10 +55,17 @@ def health():
     return {"status": "ok"}
 
 
+def _jsonable(rows: list[dict]) -> list[dict]:
+    for row in rows:
+        for k, v in row.items():
+            if hasattr(v, "isoformat"):
+                row[k] = v.isoformat()
+    return rows
+
+
 @app.websocket("/ws/live")
 async def live(ws: WebSocket):
-    """Push traffic + positions + stats every POLL_SECONDS. Polling fallback
-    exists in the frontend, so plain HTTP deployments keep working."""
+    """Push traffic + positions + fresh query-log entries every poll tick."""
     await ws.accept()
     try:
         while True:
@@ -62,25 +73,18 @@ async def live(ws: WebSocket):
                 with conn.cursor() as cur:
                     cur.execute("SELECT * FROM live_traffic_summary ORDER BY segment_id")
                     cols = [d[0] for d in cur.description]
-                    traffic_rows = [dict(zip(cols, r, strict=True)) for r in cur.fetchall()]
+                    traffic_rows = _jsonable(
+                        [dict(zip(cols, r, strict=True)) for r in cur.fetchall()])
                     cur.execute("SELECT * FROM latest_positions")
                     pcols = [d[0] for d in cur.description]
-                    pos_rows = []
-                    for r in cur.fetchall():
-                        d = dict(zip(pcols, r, strict=True))
-                        for k, v in d.items():
-                            if hasattr(v, "isoformat"):
-                                d[k] = v.isoformat()
-                        pos_rows.append(d)
-            for row in traffic_rows:
-                for k, v in row.items():
-                    if hasattr(v, "isoformat"):
-                        row[k] = v.isoformat()
+                    pos_rows = _jsonable(
+                        [dict(zip(pcols, r, strict=True)) for r in cur.fetchall()])
             await ws.send_text(json.dumps({
                 "traffic": traffic_rows,
                 "positions": pos_rows,
+                "logs": querylog.snapshot(limit=25),
             }))
-            await asyncio.sleep(settings.poll_seconds)
+            await asyncio.sleep(runtime.get("poll_seconds"))
     except WebSocketDisconnect:
         pass
 

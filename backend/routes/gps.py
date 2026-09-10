@@ -1,5 +1,8 @@
+import time
+
 from fastapi import APIRouter, HTTPException
 
+from .. import querylog
 from ..schemas import GpsBatch, GpsIngest
 from ..services.gps_processor import ingest_point
 
@@ -16,10 +19,19 @@ def ingest(point: GpsIngest):
 
 @router.post("/batch", summary="Ingest a batch of GPS fixes")
 def ingest_batch(batch: GpsBatch):
+    t0 = time.perf_counter()
     results = []
     for point in batch.points:
         try:
             results.append(ingest_point(point))
         except Exception as exc:  # noqa: BLE001 — per-point errors don't abort batch
             results.append({"error": str(exc), "vehicle": point.vehicle_number})
+    ms = (time.perf_counter() - t0) * 1000
+    querylog.log(
+        "SQL",
+        "INSERT INTO gps_data (…) ×N; INSERT INTO vehicle_position (…) ×N; "
+        "SELECT calculate_segment_traffic(seg, window)",
+        ms,
+        f"batch of {len(batch.points)} fixes",
+    )
     return {"ingested": len(results), "results": results}

@@ -1,7 +1,7 @@
 """GPS + map-matched position ingest (the real-time hot path)."""
 from __future__ import annotations
 
-from ..config import settings
+from .. import runtime
 from ..database import get_pool
 from ..schemas import GpsIngest
 from ..services import geo
@@ -110,7 +110,7 @@ def ingest_point(point: GpsIngest) -> dict:
             if segment_id is not None:
                 cur.execute(
                     "SELECT calculate_segment_traffic(%s, %s)",
-                    (segment_id, settings.traffic_window_minutes),
+                    (segment_id, runtime.get("traffic_window_minutes")),
                 )
                 level = str(cur.fetchone()[0])
     return {"vehicle_id": vehicle_id, "segment_id": segment_id, "congestion": level}

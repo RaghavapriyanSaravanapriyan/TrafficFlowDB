@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from ..config import settings
+from .. import querylog, runtime
 from ..database import get_pool
 
 router = APIRouter(prefix="/api/traffic", tags=["traffic"])
@@ -52,10 +52,16 @@ def segment_detail(segment_id: int):
 
 @router.post("/refresh")
 def refresh():
+    import time
+    t0 = time.perf_counter()
     with get_pool().connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT * FROM refresh_all_traffic(%s)",
-                (settings.traffic_window_minutes,),
+                (runtime.get("traffic_window_minutes"),),
             )
-            return {"refreshed": cur.fetchall()}
+            rows = cur.fetchall()
+    ms = (time.perf_counter() - t0) * 1000
+    querylog.log("SQL", "SELECT * FROM refresh_all_traffic(window)", ms,
+                 f"{len(rows)} segments recomputed")
+    return {"refreshed": rows}

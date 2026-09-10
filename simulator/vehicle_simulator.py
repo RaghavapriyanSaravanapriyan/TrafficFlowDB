@@ -54,8 +54,15 @@ class Vehicle:
         self.number = plate()
         self.vtype = pick_type()
         # Jam vehicles are pinned to the jammed segment for the demo.
-        pool = [s for s in segments if s["id"] == jam_segment] if jam_segment else segments
-        self.seg = random.choice(pool or segments)
+        if jam_segment:
+            pool = [s for s in segments if s["id"] == jam_segment] or segments
+        else:
+            # 60% metro streets / 40% national trunk so both layers stay alive.
+            metro = [s for s in segments if s.get("scope", "metro") == "metro"]
+            trunk = [s for s in segments if s.get("scope") == "trunk"]
+            pool = metro if random.random() < 0.6 else (trunk or metro)
+            pool = pool or segments
+        self.seg = random.choice(pool)
         self.t = random.random()          # progress along segment 0..1
         self.fwd = random.random() < 0.5  # travel direction
         self.speed = self.seg["speed_limit"] * random.uniform(0.5, 0.9)

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
+from .. import querylog
 from ..database import get_pool
 from ..schemas import RouteRequestIn
 from ..services.route_optimizer import dijkstra, refresh_graph
@@ -15,8 +16,11 @@ def request_route(body: RouteRequestIn):
         graph = refresh_graph(conn)
         if body.source_id not in graph["nodes"] or body.destination_id not in graph["nodes"]:
             raise HTTPException(status_code=404, detail="Unknown intersection")
+        import time
+        t0 = time.perf_counter()
         result = dijkstra(graph, body.source_id, body.destination_id,
                           priority=body.priority)
+        dms = (time.perf_counter() - t0) * 1000
         if result is None:
             raise HTTPException(status_code=404, detail="No route found")
         with conn.cursor() as cur:
@@ -46,6 +50,13 @@ def request_route(body: RouteRequestIn):
                 )
     src = graph["nodes"][body.source_id]["name"]
     dst = graph["nodes"][body.destination_id]["name"]
+    querylog.log(
+        "ROUTE",
+        f"Dijkstra({len(graph['nodes'])} nodes, {len(graph['segments'])} edges, "
+        "w = dist/live_speed) + INSERT route_request/route/route_segment[]",
+        dms,
+        f"{src} → {dst}: {result['estimated_time_min']} min, {result['total_distance_km']} km",
+    )
     return {"request_id": req_id, "route_id": route_id,
             "source": src, "destination": dst, **result}
 

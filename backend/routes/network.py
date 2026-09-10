@@ -10,11 +10,11 @@ def intersections():
     with get_pool().connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT intersection_id, name, latitude, longitude "
-                "FROM intersection ORDER BY intersection_id"
+                "SELECT intersection_id, name, latitude, longitude, scope "
+                "FROM intersection ORDER BY scope, intersection_id"
             )
             return [
-                {"id": r[0], "name": r[1], "lat": r[2], "lon": r[3]}
+                {"id": r[0], "name": r[1], "lat": r[2], "lon": r[3], "scope": r[4]}
                 for r in cur.fetchall()
             ]
 
@@ -27,6 +27,7 @@ def segments():
                 """
                 SELECT rs.segment_id, rs.segment_name, rs.distance_km,
                        rs.speed_limit_kmh, rs.road_type, rs.capacity, rs.is_active,
+                       rs.scope,
                        rs.start_intersection_id, rs.end_intersection_id,
                        i1.latitude, i1.longitude, i2.latitude, i2.longitude
                 FROM road_segment rs
@@ -38,8 +39,8 @@ def segments():
             return [
                 {"id": r[0], "name": r[1], "distance_km": r[2], "speed_limit": r[3],
                  "road_type": r[4], "capacity": r[5], "active": r[6],
-                 "a": r[7], "b": r[8],
-                 "a_lat": r[9], "a_lon": r[10], "b_lat": r[11], "b_lon": r[12]}
+                 "scope": r[7], "a": r[8], "b": r[9],
+                 "a_lat": r[10], "a_lon": r[11], "b_lat": r[12], "b_lon": r[13]}
                 for r in cur.fetchall()
             ]
 
