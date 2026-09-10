@@ -305,85 +305,73 @@ $("routeBtn").addEventListener("click", async () => {
   finally { btn.disabled = false; btn.textContent = "Find best route"; }
 });
 
-/* ---- console ------------------------------------------------------------------------ */
-let pendingSrc = null;
-async function runConsole(text) {
-  const q = (text !== undefined ? text : $("cmdInput").value).trim();
+/* ---- SQL Lab ------------------------------------------------------------------------ */
+async function runSql(text) {
+  const q = (text !== undefined ? text : $("sqlInput").value).trim();
   if (!q) return;
-  const box = $("cmdOut");
-  box.hidden = false; box.innerHTML = "<p>Running against PostgreSQL…</p>";
+  const box = $("sqlOut");
+  box.hidden = false; box.innerHTML = "<p>Running as read-only role…</p>";
   try {
-    const { action, result } = await postJSON("/api/command", { text: q });
-    box.innerHTML = renderAction(action, result);
-    wireOptions(box);
-    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  } catch (e) { box.innerHTML = `<p class="cmd-error">Error: ${escapeHtml(e.message)}</p>`; }
+    const r = await postJSON("/api/sql/run", { sql: q });
+    const head = r.columns.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
+    const body = r.rows.map((row) =>
+      `<tr>${row.map((v) => `<td>${escapeHtml(v === null ? "NULL" : String(v))}</td>`).join("")}</tr>`).join("");
+    box.innerHTML = `
+      <div class="sql-meta"><b>${r.rowcount}</b> rows in ${r.ms} ms${r.truncated ? " (first 200 shown)" : ""}</div>
+      <div class="sql-scroll table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body || '<tr><td>No rows.</td></tr>'}</tbody></table></div>`;
+  } catch (e) { box.innerHTML = `<p class="cmd-error">Blocked: ${escapeHtml(e.message)}</p>`; }
 }
-function chipRow(items, cls) {
-  return `<div class="opt-row">${items.map((n) =>
-    `<button class="chip ${cls}" data-name="${escapeHtml(n.name)}">${escapeHtml(n.name)}</button>`).join("")}</div>`;
+async function loadSqlLab() {
+  try {
+    const { tables } = await getJSON("/api/sql/schema");
+    $("schemaCount").textContent = `${tables.length} tables & views`;
+    $("schemaGrid").innerHTML = tables.map((t) => `
+      <div class="schema-table"><b>${escapeHtml(t.name)}</b>
+      ${t.columns.map((c) => `<span><i>${escapeHtml(c.name)}</i> · ${escapeHtml(c.type)}</span>`).join("")}</div>`).join("");
+  } catch { $("schemaCount").textContent = "unavailable (backend starting?)"; }
+  try {
+    const { samples } = await getJSON("/api/sql/samples");
+    $("sqlChips").innerHTML = samples.map((s) =>
+      `<button class="chip" data-sql="${escapeHtml(s.sql)}">${escapeHtml(s.title)}</button>`).join("");
+    document.querySelectorAll("#sqlChips .chip").forEach((c) =>
+      c.addEventListener("click", () => { $("sqlInput").value = c.dataset.sql; runSql(c.dataset.sql); }));
+  } catch { /* samples are a nicety */ }
 }
-function renderAction(action, r) {
-  if (action === "route") { lastRouteSegs = r.segment_path; drawRoute(r.segment_path); return routeHTML(r); }
-  if (action === "congested") {
-    if (!r.length) return "<p>Network is flowing — nothing congested right now. Cause a jam to see this light up.</p>";
-    return `<ol class="legs">${r.map((s) => `<li><span class="pill ${s.congestion_level}">${s.congestion_level}</span>
-      <span><b>${escapeHtml(s.segment_name)}</b> — ${Number(s.average_speed).toFixed(0)} km/h, ${s.vehicle_count} vehicles, density ${Number(s.density).toFixed(2)}</span></li>`).join("")}</ol>`;
-  }
-  if (action === "stats") {
-    return `<div class="route-meta">
-      <div><strong>${r.active_vehicles}</strong><span>active vehicles</span></div>
-      <div><strong>${r.gps_updates_last_5min}</strong><span>fixes / 5 min</span></div>
-      <div><strong>${r.segments_high + r.segments_medium}</strong><span>congested</span></div>
-      <div><strong>${r.routes_computed}</strong><span>routes</span></div>
-      <div><strong>${r.query_ms} ms</strong><span>query time</span></div></div>`;
-  }
-  if (action === "traffic_request") {
-    if (!r.length) return "<p class='cmd-error'>No segment matches that name.</p>";
-    return `<ol class="legs">${r.map((s) => `<li><span class="pill ${s.congestion_level}">${s.congestion_level}</span>
-      <span><b>${escapeHtml(s.segment_name)}</b> — ${Number(s.average_speed).toFixed(0)} km/h · ${s.vehicle_count} vehicles · scope ${s.scope}</span></li>`).join("")}</ol>`;
-  }
-  if (action === "jam_request") {
-    return `<p>Jam injected on <b>${escapeHtml(r.segment)}</b> — ${r.injected} vehicles crawling, ` +
-      `now <span class="pill ${r.traffic.congestion}">${r.traffic.congestion}</span> ` +
-      `at ${r.traffic.avg_speed} km/h. Watch the map turn red.</p>`;
-  }
-  if (action === "reset") return `<p>Scenario traffic cleared (${r.removed_scenario_vehicles} vehicles removed). Network is free-flowing again.</p>`;
-  if (action === "clarify_route") {
-    pendingSrc = null;
-    return `<p>Which exactly? Pick each end:</p>
-      <div class="opt-row">From: ${(r.src_options || []).map((n) => `<button class="chip pick-src" data-name="${escapeHtml(n.name)}">${escapeHtml(n.name)}</button>`).join("") || "<i>no match</i>"}</div>
-      <div class="opt-row">To: ${(r.dst_options || []).map((n) => `<button class="chip pick-dst" data-name="${escapeHtml(n.name)}">${escapeHtml(n.name)}</button>`).join("") || "<i>no match</i>"}</div>`;
-  }
-  if (action === "place") return `<p>Matching places (click for live traffic):</p>` + chipRow(r.options || [], "place-chip");
-  if (action === "help" || (r && r.examples)) {
-    return `<p>Try one of these:</p>` + chipRow((r.examples || []).map((e) => ({ name: e })), "ex-chip");
-  }
-  if (r && r.error) return `<p class="cmd-error">${escapeHtml(r.error)}</p>` + chipRow((r.examples || []).map((e) => ({ name: e })), "ex-chip");
-  return `<pre>${escapeHtml(JSON.stringify(r, null, 1)).slice(0, 1500)}</pre>`;
+/* ---- fleet (drawer) ---------------------------------------------------------------------- */
+$("fleetRange").addEventListener("input", () => ($("fleetVal").textContent = $("fleetRange").value));
+async function loadFleet() {
+  try {
+    const f = await getJSON("/api/fleet");
+    $("fleetOn").checked = f.enabled;
+    $("fleetRange").value = f.target;
+    $("fleetVal").textContent = f.target;
+    $("fleetNote").textContent = f.enabled
+      ? `Running: ${f.alive} vehicles live${f.last.ingested ? `, last tick ${f.last.ingested} fixes in ${f.last.ms} ms` : ""}.`
+      : "Spawns/retires live to the target — OD trips through the bulk ingest path. No terminal process needed.";
+  } catch { /* fleet endpoint missing on old backend */ }
 }
-function wireOptions(box) {
-  box.querySelectorAll(".ex-chip,.place-chip").forEach((c) =>
-    c.addEventListener("click", () => {
-      const v = c.dataset.name;
-      if (c.classList.contains("ex-chip")) { $("cmdInput").value = v; runConsole(v); }
-      else runConsole("Traffic on " + v);
-    }));
-  box.querySelectorAll(".pick-src").forEach((c) =>
-    c.addEventListener("click", () => { pendingSrc = c.dataset.name; toast("From: " + pendingSrc + " — now pick a destination"); }));
-  box.querySelectorAll(".pick-dst").forEach((c) =>
-    c.addEventListener("click", () => {
-      if (!pendingSrc) { toast("Pick a starting place first"); return; }
-      runConsole(`Route ${pendingSrc} to ${c.dataset.name}`); pendingSrc = null;
-    }));
-}
-$("cmdRun").addEventListener("click", () => runConsole());
-$("cmdInput").addEventListener("keydown", (e) => { if (e.key === "Enter") runConsole(); });
+$("fleetApply").addEventListener("click", async () => {
+  try {
+    const f = await postJSON("/api/fleet", {
+      enabled: $("fleetOn").checked, count: Number($("fleetRange").value),
+    });
+    $("fleetNote").textContent = f.enabled
+      ? `Running: ${f.alive} vehicles live.`
+      : "Fleet stopped and retired.";
+    toast(f.enabled ? `Fleet → ${f.target} vehicles` : "Fleet stopped");
+  } catch (e) { toast("Fleet failed: " + e.message); }
+});
+/* (NL console rendering retired in favor of SQL Lab — /api/command stays available.) */
+/* (option-chip wiring retired with the NL console.) */
+$("sqlRun").addEventListener("click", () => runSql());
+$("sqlInput").addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") runSql();
+});
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
     e.preventDefault();
-    $("console").scrollIntoView({ behavior: "smooth" });
-    setTimeout(() => $("cmdInput").focus(), 350);
+    $("sqllab").scrollIntoView({ behavior: "smooth" });
+    setTimeout(() => $("sqlInput").focus(), 350);
   }
 });
 
@@ -463,10 +451,8 @@ document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
   try {
     await loadConfig();
     await loadNetwork();
-    const { examples } = await getJSON("/api/command/examples");
-    $("cmdChips").innerHTML = examples.map((e) => `<button class="chip ex0">${e}</button>`).join("");
-    document.querySelectorAll(".ex0").forEach((c) =>
-      c.addEventListener("click", () => { $("cmdInput").value = c.textContent; runConsole(c.textContent); }));
+    await loadSqlLab();
+    await loadFleet();
     try {
       const { logs } = await getJSON("/api/logs?limit=25");
       appendLogs(logs);

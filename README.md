@@ -1,9 +1,11 @@
 # TrafficFlowDB
 
 **Real-time traffic intelligence on a relational database — across India.**
-Vehicles stream GPS into PostgreSQL, the database scores congestion per road
-segment, and a Dijkstra router with live travel-time weights recommends the
-fastest route. The dashboard shows every query happening under the hood, live.
+Vehicles drive real origin→destination trips, stream GPS into PostgreSQL, the
+database scores congestion per segment, and Dijkstra reroutes around it.
+You can spawn fleets, inject jams, rewrite the congestion rulebook live —
+and query the database yourself in the SQL Lab while every query streams
+through the Under-the-hood terminal.
 
 > One-line pitch: a real-time traffic intelligence system in which a relational
 > database acts as the central layer for collecting, managing, analyzing, and serving
@@ -11,7 +13,7 @@ fastest route. The dashboard shows every query happening under the hood, live.
 
 Live network: **27 national highway hubs + 12 Coimbatore metro intersections,
 54 segments** — one connected graph, so `Delhi → Gandhipuram` routes in a single
-query. Traffic itself is generated live — no canned congestion.
+query. Traffic is generated live — no canned congestion.
 
 ---
 
@@ -35,31 +37,54 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn backend.main:app --reload
 # open http://localhost:8000  (?theme=dark for dark mode)
-
-python -m simulator.vehicle_simulator --vehicles 70   # second terminal
 ```
 
-`docker compose up --build` runs the API containerized instead.
-Config: `DATABASE_URL`, `TRAFFIC_WINDOW_MINUTES`, `POLL_SECONDS` (see `.env.example`;
-all three are also tunable live via `PUT /api/config` / the Customize drawer).
+Traffic — pick either (or both):
+
+```bash
+# A. CLI fleet: OD-trip driving, density-aware speeds, bus dwell (own terminal)
+python -m simulator.vehicle_simulator --vehicles 70 --mode trip
+
+# B. Server fleet: no terminal needed — drawer → Customize → fleet → Apply,
+#    or: curl -X POST localhost:8000/api/fleet -d '{"enabled":true,"count":200}'
+```
+
+Config: `DATABASE_URL`, `TRAFFIC_WINDOW_MINUTES`, `POLL_SECONDS`,
+`READONLY_DB_PASSWORD` (see `.env.example`; the first three are also tunable
+live via `PUT /api/config` / the Customize drawer).
 
 ## 3. Architecture
 
 ```
-Simulator fleet → POST /api/gps/batch → map-match → PostgreSQL
-    gps_data (raw) + vehicle_position (matched)
-        → calculate_segment_traffic(seg, window) [stored proc, reads traffic_thresholds]
+Fleet (CLI and/or server-side) → POST /api/gps/batch → bulk ingest:
+    upsert vehicles → bulk INSERT gps_data + vehicle_position
+        → ONE SELECT refresh_all_traffic(window) per batch
             → traffic_condition (snapshot) + traffic_history (trend)
                 → Dijkstra on travel-time weights → route + route_segment
                     → REST + WebSocket /ws/live (traffic, positions, query log)
-                        → glass dashboard: map, console, SQL terminal
+                        → glass dashboard: SQL Lab, map, live SQL terminal
 ```
 
 `intersection` rows are nodes, `road_segment` rows are bidirectional edges
-(`scope`: `metro` / `trunk` / `connector`). Each GPS insert refreshes **only its
-segment** — ingest stays O(1) per fix (~60 fixes/s measured with live re-scoring).
+(`scope`: `metro` / `trunk` / `connector`). Bulk ingest keeps round trips
+constant per batch: **~1,300–1,600 fixes/sec** measured (200-fix batch in ~110 ms).
 
-## 4. Database design (the core)
+## 4. Realistic traffic
+
+Vehicles don't random-walk — each one picks a destination (national-biased,
+like real intercity flow), follows the Dijkstra shortest-time path, and
+re-plans on arrival:
+
+- **Density-aware speed**: target speed folds in live segment load
+  (`1 − density × 0.6`), eased toward — jams propagate organically.
+- **Driver personalities**: per-vehicle aggression factor × type factor
+  (bus 0.85, emergency 1.3 and congestion-immune).
+- **Bus dwell**: buses pause 1–3 ticks at nodes (stops) with 40% probability.
+- **60/40 metro/trunk split** at spawn so both layers stay alive.
+
+At ~200+ vehicles the metro starts jamming on its own — no scripted congestion.
+
+## 5. Database design (the core)
 
 **Entities (3NF):** `users` (+`admin_profile`, `driver_profile`) ·
 `vehicle` (+`car_detail`, `bus_detail`, `emergency_vehicle_detail`) ·
@@ -74,12 +99,13 @@ segment** — ingest stays O(1) per fix (~60 fixes/s measured with live re-scori
 (`live_traffic_summary`, `congested_segments`, `latest_positions`,
 `segment_stats_5min`) · triggers (GPS validation, `last_seen`, route guard,
 `pg_notify` on congestion change) · procedures (`calculate_segment_traffic`,
-`refresh_all_traffic`, `get_congested_segments`, `find_nearby_segments`).
+`refresh_all_traffic`, `get_congested_segments`, `find_nearby_segments`) ·
+a SELECT-only `traffic_ro` role provisioned at boot for the SQL Lab.
 
 Files: `database/schema.sql`, `views.sql`, `triggers.sql`, `procedures.sql`,
 `seed_coimbatore.sql`, `migrate_india.sql` — applied in order by `init_db()`.
 
-## 5. Traffic analysis
+## 6. Traffic analysis
 
 Rolling window (default 5 min, live-tunable) per segment.
 Rule lives in `traffic_thresholds`, read by the procedure on every call:
@@ -91,7 +117,7 @@ MEDIUM   if avg_speed < med_speed  OR  density > med_density     (30, 0.50)
 LOW      otherwise
 ```
 
-## 6. Routing
+## 7. Routing
 
 Dijkstra, weight = live travel time `w = distance / effective_speed × 60`
 (live average when observed, else limit derated by congestion multiplier
@@ -99,26 +125,34 @@ LOW 1.0 / MEDIUM 1.5 / HIGH 2.5). Emergency `priority=true` uses free-flow
 weights. Requests persist `route_request → route → route_segment[]`.
 Delhi → Mumbai (1,460 km, 4 legs) computes in ~0.05 ms.
 
-## 7. Console — ask in plain English
+## 8. SQL Lab — query it yourself
 
-`POST /api/command {"text": "..."}` (parser in `backend/services/command.py`,
-unit-tested). Dashboard: type or press `Ctrl K`. Clickable example chips included.
+Dashboard → SQL Lab: schema browser (24 tables & views) + editor
+(`Ctrl K` focuses, `Ctrl ⏎` runs) + results grid. Triple-locked reads:
 
-```
-Route Delhi to Mumbai        Delhi to Chennai          (bare "A to B" works too)
-Route Gandhipuram to Singanallur
-Traffic on Avinashi Rd       Where is it jammed?       Stats
-Jam Sathy Rd                 Jam NH44 50               Rush hour    Reset
-```
+1. Parser allowlist — `SELECT`/`WITH` only, single statement, no stacking,
+   no catalog snooping (`pg_*`, `version()`).
+2. The `traffic_ro` role holds SELECT-only grants — even a smuggled write
+   dies with `permission denied` (verified live).
+3. `statement_timeout = 5 s` on the read-only pool; 200-row cap.
 
-Ambiguous names return pick-lists; unknown input returns examples, never silence.
+Recommended starter queries (one click each, all verified live):
 
-## 8. REST + WebSocket API
+1. **Congested right now** — live leaderboard from `live_traffic_summary`.
+2. **Slowest trunk corridors** — where the highways are bleeding speed.
+3. **Load by scope** — metro vs trunk segment/vehicle/speed rollup.
+4. **Fleet mix, live** — car/bus/emergency counts + speeds from `latest_positions`.
+5. **Fixes per minute (15 min)** — ingest firehose rate from `gps_data`.
+6. **Hourly speed trend** — 12-hour network performance from `traffic_history`.
+
+(`POST /api/command` NL console from v2 remains as an API extra.)
+
+## 9. REST + WebSocket API
 
 | Method | Endpoint                        | Purpose                                        |
 |--------|---------------------------------|------------------------------------------------|
 | GET    | `/api/health`                   | readiness                                      |
-| POST   | `/api/gps` · `/api/gps/batch`   | ingest 1 / ≤500 fixes                          |
+| POST   | `/api/gps` · `/api/gps/batch`   | ingest 1 fix / bulk batch (constant round trips) |
 | GET    | `/api/network/*`                | intersections, segments (+scope), live positions |
 | GET    | `/api/traffic/summary`          | live snapshot (drives map + table)             |
 | GET    | `/api/traffic/congested?level=` | worst-first                                    |
@@ -127,57 +161,62 @@ Ambiguous names return pick-lists; unknown input returns examples, never silence
 | POST   | `/api/routes/request`           | `{source_id, destination_id, priority?}`       |
 | GET    | `/api/routes/history`           | past recommendations                           |
 | GET/PUT| `/api/config`                   | window, poll cadence, congestion thresholds    |
+| GET/POST| `/api/fleet`                   | server fleet status / spawn-retire control     |
 | POST   | `/api/scenarios/jam`            | inject N crawling vehicles on a segment        |
 | POST   | `/api/scenarios/rush-hour`      | peak load on top-capacity corridors            |
 | POST   | `/api/scenarios/reset`          | remove scenario vehicles, recompute            |
-| POST   | `/api/command` · GET `/api/command/examples` | NL console                         |
+| GET/POST| `/api/sql/*`                   | schema, samples, read-only query runner        |
 | GET    | `/api/logs?since=&limit=`       | live query-log ring buffer                     |
 | WS     | `/ws/live`                      | traffic + positions + log entries every tick   |
 
 Docs: `:8000/docs`. The **Under the hood** terminal streams the query log
 (SQL text + ms + context) with category filters, pause, and running averages —
-kept in a bounded in-memory ring so logging never slows ingest.
+a bounded in-memory ring, so logging never slows ingest.
 
-## 9. Demo script
+## 10. Demo script
 
 1. `docker compose up -d db` → `uvicorn backend.main:app` → `:8000`.
-2. `python -m simulator.vehicle_simulator --vehicles 70` — India + metro light up.
-3. Console: `Jam NH44` (or drawer → Cause jam) — corridor turns red.
-4. Console: `Route Delhi to Mumbai` — watch it swerve around the jam.
-5. Open **Under the hood** while doing 3–4: every `INSERT`, `calculate_segment_traffic`
-   and Dijkstra lands in the terminal with timings.
+2. Drawer → fleet → 200 vehicles → Apply (or CLI sim). India + metro light up.
+3. SQL Lab → run **Congested right now** — your own query, live rows.
+4. Drawer → jam NH44 (or console scenario) — corridor turns red in seconds.
+5. `Route Delhi to Mumbai` — watch it swerve around the jam; check the
+   terminal for the 0.05 ms Dijkstra line.
 
-## 10. Metrics (measured)
+## 11. Metrics (measured)
 
-~60 fixes/s sustained ingest with per-fix re-scoring · stats ~3–8 ms ·
-Dijkstra 39 nodes/54 edges ~0.05 ms · dashboard tick 2 s (WS push + poll fallback).
+Bulk ingest **~1,300–1,600 fixes/s** (200-fix batch ≈ 110 ms, 1 refresh) ·
+stats ~5–15 ms under load · Dijkstra 39 nodes/54 edges ~0.05 ms ·
+dashboard tick 2 s (WS push + poll fallback).
 
-## 11. Layout
+## 12. Layout
 
 ```
-backend/   main, database pool, runtime config, querylog, schemas,
-           routes/ (gps, network, traffic, routing, vehicles, stats,
-                    config, scenarios, command, logs)
-           services/ (geo, gps_processor, traffic_analyzer,
-                      route_optimizer, scenarios, command)
-simulator/ graph-driving GPS fleet (60/40 metro/trunk split, jam mode)
+backend/   main, database pool (+read-only role), runtime config, querylog,
+           schemas, routes/ (gps, network, traffic, routing, vehicles, stats,
+           config, fleet, scenarios, command, sql, logs)
+           services/ (geo, gps_processor, ingest_bulk, traffic_analyzer,
+           route_optimizer, scenarios, command, sqllab)
+simulator/ OD-trip fleet (Vehicle mover, build_graph/plan_trip),
+           vehicle_simulator.py (CLI), fleet.py (server FleetManager)
 frontend/  glass dashboard: index.html, styles.css, app.js (Leaflet)
 database/  schema, views, triggers, procedures, Coimbatore seed, India migration
-tests/     28 pytest tests: geo, congestion rules, Dijkstra, console parser
+tests/     36 pytest tests: geo, congestion rules, Dijkstra, console parser, SQL guard
 ```
 
-## 12. Testing
+## 13. Testing
 
 ```bash
-pytest tests -q   # 28 passed: Haversine/map-match, classifier boundaries,
+pytest tests -q   # 36 passed: Haversine/map-match, classifier boundaries,
                   # Dijkstra (avoidance, priority, unreachable, totals),
-                  # console parser (routes, fuzzy, jam, synonyms, unknown)
+                  # console parser, SQL Lab guard (writes/stacking/catalog blocked,
+                  # all 6 samples valid)
 ```
 
-## 13. Methodology (for the report)
+## 14. Methodology (for the report)
 
 Requirement analysis → conceptual design (ER/EER: 10 entities, 2 specializations) →
 logical design → 3NF (positions reference segments; snapshot/history split;
-thresholds factored into their own table) → physical design (PK/FK/checks,
-indexes, views, triggers, procedures) → implementation (DB → API → simulator →
-analyzer → router → dashboard) → verification (live E2E: jam → red map → reroute).
+thresholds factored out; SELECT-only role separation) → physical design (PK/FK/checks,
+indexes, views, triggers, procedures) → implementation (DB → bulk API → OD fleet →
+analyzer → router → dashboard) → verification (live E2E: spawn → density jam →
+red map → reroute → your own SQL confirms it).

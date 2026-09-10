@@ -17,7 +17,7 @@
   <div class="nav-inner">
     <a class="brand" href="#top"><span class="dot" id="statusDot"></span>TrafficFlowDB</a>
     <nav>
-      <a href="#console">Console</a>
+      <a href="#sqllab">SQL Lab</a>
       <a href="#live">Live Map</a>
       <a href="#underhood">Under the hood</a>
       <a href="#network">Network</a>
@@ -41,7 +41,7 @@
     </p>
     <div class="cta">
       <a class="btn primary" href="#live">Open live map</a>
-      <a class="btn" href="#console">Ask the console</a>
+      <a class="btn" href="#sqllab">Query the database</a>
     </div>
     <div class="hero-stats">
       <div><strong id="hsVehicles">–</strong><span>active vehicles</span></div>
@@ -52,22 +52,25 @@
     </div>
   </section>
 
-  <!-- Console -->
-  <section class="card glass reveal" id="console">
+  <!-- SQL Lab -->
+  <section class="card glass reveal" id="sqllab">
     <div class="card-head">
       <div>
-        <h2>Console</h2>
-        <p>Type a question, get a live answer from the database. Press <kbd>Ctrl K</kbd> anywhere to jump here.</p>
+        <h2>SQL Lab</h2>
+        <p>Write real SQL against the live database. Read-only role, 5&nbsp;s statement timeout, <kbd>Ctrl K</kbd> jumps here, <kbd>Ctrl ⏎</kbd> runs.</p>
       </div>
     </div>
-    <div class="console-box">
-      <span class="prompt">▸</span>
-      <input id="cmdInput" type="text" autocomplete="off" spellcheck="false"
-             placeholder='Try "Route Delhi to Mumbai" or "Jam Sathy Rd"…' />
-      <button class="btn primary" id="cmdRun">Run</button>
+    <details class="schema" id="schemaBox">
+      <summary>Database structure — <span id="schemaCount">loading…</span></summary>
+      <div class="schema-grid" id="schemaGrid"></div>
+    </details>
+    <div class="sql-box">
+      <textarea id="sqlInput" rows="6" spellcheck="false"
+        placeholder="SELECT * FROM live_traffic_summary LIMIT 5;"></textarea>
+      <button class="btn primary" id="sqlRun">Run query</button>
     </div>
-    <div class="chips" id="cmdChips"></div>
-    <div id="cmdOut" class="cmd-out" hidden></div>
+    <div class="chips" id="sqlChips"></div>
+    <div id="sqlOut" class="cmd-out" hidden></div>
   </section>
 
   <!-- Live map -->
@@ -105,6 +108,7 @@
           <button data-f="ALL" class="active">All</button>
           <button data-f="SQL">SQL</button>
           <button data-f="ROUTE">Routes</button>
+          <button data-f="FLEET">Fleet</button>
           <button data-f="SCENARIO">Scenarios</button>
           <button data-f="CMD">Console</button>
         </div>
@@ -189,6 +193,14 @@
   </div>
   <button class="btn primary wide" id="cfgApply">Apply configuration</button>
   <p class="drawer-note" id="cfgNote">Thresholds live in PostgreSQL (<code>traffic_thresholds</code>) — applying rewrites them and recomputes every segment.</p>
+
+  <h4>Vehicle fleet (built in)</h4>
+  <label class="check"><input type="checkbox" id="fleetOn" /> Run server-side fleet</label>
+  <label class="slider">Vehicles <b id="fleetVal">0</b>
+    <input type="range" id="fleetRange" min="0" max="500" step="10" value="0" />
+  </label>
+  <button class="btn primary wide" id="fleetApply">Apply fleet</button>
+  <p class="drawer-note" id="fleetNote">Spawns/retires live to the target — OD trips through the bulk ingest path. No terminal process needed.</p>
 
   <h4>Traffic scenarios</h4>
   <label>Jam a road
