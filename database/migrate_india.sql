@@ -1,10 +1,7 @@
--- ============================================================================
 -- TrafficFlowDB — Pan-India trunk network migration.
--- Adds the national highway backbone (27 city hubs + 35 trunk segments) and
--- links it to the Coimbatore metro graph via a connector segment, so routing
--- works end-to-end (e.g. Delhi -> Gandhipuram) on one connected graph.
--- Idempotent: safe to re-run on every API boot.
--- Distances are road-approximate km along the named NH corridors.
+-- 26 city hubs + 33 trunk segments on real NH corridors, one connected graph
+-- (e.g. Delhi -> Kochi routes in a single query). Idempotent: safe to re-run.
+-- Distances are road-approximate km along the named corridors.
 -- ============================================================================
 
 -- Scope columns are ensured by schema.sql (runs before views); this file
@@ -26,7 +23,6 @@ INSERT INTO intersection (intersection_id, name, latitude, longitude, scope) VAL
     (113, 'Vijayawada',       16.5062,  80.6480, 'national'),
     (114, 'Chennai',          13.0827,  80.2707, 'national'),
     (115, 'Bengaluru',        12.9716,  77.5946, 'national'),
-    (116, 'Coimbatore Hub',   11.0200,  76.9750, 'national'),
     (117, 'Madurai',           9.9252,  78.1198, 'national'),
     (118, 'Kochi',             9.9312,  76.2673, 'national'),
     (119, 'Hyderabad',        17.3850,  78.4867, 'national'),
@@ -62,9 +58,7 @@ VALUES
     (32, 112, 113, 'NH16 (Visakhapatnam - Vijayawada)',      350,  80, 'highway', 300, TRUE, 'trunk'),
     (33, 113, 114, 'NH16 (Vijayawada - Chennai)',            460,  80, 'highway', 300, TRUE, 'trunk'),
     (34, 114, 115, 'NH48 (Chennai - Bengaluru)',             350, 100, 'highway', 350, TRUE, 'trunk'),
-    (35, 115, 116, 'NH44 (Bengaluru - Coimbatore)',          365, 100, 'highway', 350, TRUE, 'trunk'),
-    (36, 116, 118, 'NH544 (Coimbatore - Kochi)',             190,  80, 'highway', 250, TRUE, 'trunk'),
-    (37, 116, 117, 'NH83 (Coimbatore - Madurai)',            215,  80, 'highway', 250, TRUE, 'trunk'),
+    (55, 117, 118, 'NH85 (Madurai - Kochi)',                 310,  80, 'highway', 250, TRUE, 'trunk'),
     (38, 117, 114, 'NH38/32 (Madurai - Chennai)',            460,  80, 'highway', 250, TRUE, 'trunk'),
     (39, 115, 119, 'NH44 (Bengaluru - Hyderabad)',           570, 100, 'highway', 350, TRUE, 'trunk'),
     (40, 119, 113, 'NH65 (Hyderabad - Vijayawada)',          270,  80, 'highway', 300, TRUE, 'trunk'),
@@ -80,8 +74,7 @@ VALUES
     (50, 105, 104, 'NH21 (Agra - Jaipur)',                   240,  80, 'highway', 250, TRUE, 'trunk'),
     (51, 120, 108, 'NH19 (Nagpur - Varanasi)',               600,  80, 'highway', 250, TRUE, 'trunk'),
     (52, 108, 106, 'NH31 (Varanasi - Lucknow)',              320,  80, 'highway', 250, TRUE, 'trunk'),
-    (53, 110, 127, 'NH27 (Kolkata - Guwahati)',             1000,  80, 'highway', 250, TRUE, 'trunk'),
-    (54, 116, 4,   'Coimbatore Hub - Peelamedu Link',         6.5,  50, 'arterial', 60, TRUE, 'connector')
+    (53, 110, 127, 'NH27 (Kolkata - Guwahati)',             1000,  80, 'highway', 250, TRUE, 'trunk')
 ON CONFLICT (segment_id) DO NOTHING;
 
 SELECT setval('road_segment_segment_id_seq',

@@ -19,7 +19,7 @@ _pool: ConnectionPool | None = None
 _ro_pool: ConnectionPool | None = None
 
 SCHEMA_FILES = ("schema.sql", "views.sql", "triggers.sql", "procedures.sql")
-MIGRATION_FILES = ("migrate_india.sql",)
+MIGRATION_FILES = ("migrate_india.sql", "migrate_all_india.sql")
 
 
 def get_pool() -> ConnectionPool:
@@ -51,17 +51,14 @@ def wait_for_db(timeout: float = 60.0) -> None:
     raise RuntimeError(f"Database never became ready: {last}")
 
 
-def init_db(seed: bool = True) -> None:
-    """Create schema in dependency order, load the road network, run migrations."""
+def init_db() -> None:
+    """Create schema in dependency order, then run data migrations."""
     base = pathlib.Path(__file__).resolve().parent.parent / "database"
     pool = get_pool()
     with pool.connection() as conn:
         with conn.cursor() as cur:
             for name in SCHEMA_FILES:
                 cur.execute((base / name).read_text())
-        if seed:
-            with conn.cursor() as cur:
-                cur.execute((base / "seed_coimbatore.sql").read_text())
         with conn.cursor() as cur:
             for name in MIGRATION_FILES:
                 cur.execute((base / name).read_text())

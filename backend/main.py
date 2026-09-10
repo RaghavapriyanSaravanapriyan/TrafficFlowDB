@@ -26,7 +26,7 @@ FRONTEND_DIR = pathlib.Path(__file__).resolve().parent.parent / "frontend"
 async def lifespan(app: FastAPI):
     from simulator.fleet import FleetManager
     wait_for_db()
-    init_db(seed=True)
+    init_db()
     querylog.log("NET", "lifespan: schema + seed + migrations applied", 0,
                  "API ready")
     app.state.fleet = FleetManager()
