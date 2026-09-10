@@ -23,6 +23,8 @@ function setTheme(t, animate = true) {
 (function initTheme() {
   let t = "light";
   try { t = localStorage.getItem("tfdb-theme") || "light"; } catch { /* ignore */ }
+  const qp = new URLSearchParams(location.search).get("theme");
+  if (qp === "light" || qp === "dark") t = qp; // ?theme=dark deep-link
   document.documentElement.dataset.theme = t;
 })();
 $("themeBtn").addEventListener("click", (e) => {

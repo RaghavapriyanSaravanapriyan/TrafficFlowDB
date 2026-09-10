@@ -13,6 +13,11 @@ def overview():
     with get_pool().connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM vehicle WHERE status = 'active'")
+            fleet = int(cur.fetchone()[0])
+            cur.execute(
+                "SELECT COUNT(DISTINCT vehicle_id) FROM vehicle_position "
+                "WHERE recorded_at > NOW() - INTERVAL '5 minutes'"
+            )
             vehicles = int(cur.fetchone()[0])
             cur.execute("SELECT COUNT(*) FROM gps_data")
             gps_total = int(cur.fetchone()[0])
@@ -34,6 +39,7 @@ def overview():
     ms = round((time.perf_counter() - t0) * 1000, 2)
     return {
         "active_vehicles": vehicles,
+        "fleet_total": fleet,
         "gps_updates_total": gps_total,
         "gps_updates_last_5min": gps_recent,
         "segments_high": high,
