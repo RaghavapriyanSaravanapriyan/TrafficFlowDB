@@ -17,18 +17,22 @@ from fastapi.staticfiles import StaticFiles
 from . import querylog, runtime
 from .config import settings
 from .database import close_pool, get_pool, init_db, wait_for_db
-from .routes import command, config, gps, logs, network, routing, scenarios, stats, traffic, vehicles
+from .routes import command, config, fleet, gps, logs, network, routing, scenarios, sql, stats, traffic, vehicles
 
 FRONTEND_DIR = pathlib.Path(__file__).resolve().parent.parent / "frontend"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from simulator.fleet import FleetManager
     wait_for_db()
     init_db(seed=True)
     querylog.log("NET", "lifespan: schema + seed + migrations applied", 0,
                  "API ready")
+    app.state.fleet = FleetManager()
+    app.state.fleet.start()
     yield
+    await app.state.fleet.stop()
     close_pool()
 
 
@@ -43,7 +47,8 @@ app.add_middleware(
 
 for router in (gps.router, vehicles.router, traffic.router,
                network.router, routing.router, stats.router,
-               config.router, scenarios.router, command.router, logs.router):
+               config.router, scenarios.router, command.router, logs.router,
+               fleet.router, sql.router):
     app.include_router(router)
 
 
