@@ -123,7 +123,11 @@ Dijkstra, weight = live travel time `w = distance / effective_speed × 60`
 (live average when observed, else limit derated by congestion multiplier
 LOW 1.0 / MEDIUM 1.5 / HIGH 2.5). Emergency `priority=true` uses free-flow
 weights. Requests persist `route_request → route → route_segment[]`.
-Delhi → Mumbai (1,460 km, 4 legs) computes in ~0.05 ms.
+Delhi → Mumbai (1,460 km, 4 legs) computes in ~0.05 ms. Every response also
+carries a `comparison` block: the shortest-distance route's km + ETA next to
+the fastest route's, plus `saved_min`, `extra_km`, and `same_route` — the
+dashboard renders it as a Shortest-vs-Fastest card, so the demo can prove
+"choose the fastest, not the shortest" in one number.
 
 ## 8. SQL Lab — query it yourself
 
