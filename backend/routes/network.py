@@ -1,0 +1,59 @@
+from fastapi import APIRouter
+
+from ..database import get_pool
+
+router = APIRouter(prefix="/api/network", tags=["network"])
+
+
+@router.get("/intersections")
+def intersections():
+    with get_pool().connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT intersection_id, name, latitude, longitude "
+                "FROM intersection ORDER BY intersection_id"
+            )
+            return [
+                {"id": r[0], "name": r[1], "lat": r[2], "lon": r[3]}
+                for r in cur.fetchall()
+            ]
+
+
+@router.get("/segments")
+def segments():
+    with get_pool().connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rs.segment_id, rs.segment_name, rs.distance_km,
+                       rs.speed_limit_kmh, rs.road_type, rs.capacity, rs.is_active,
+                       rs.start_intersection_id, rs.end_intersection_id,
+                       i1.latitude, i1.longitude, i2.latitude, i2.longitude
+                FROM road_segment rs
+                JOIN intersection i1 ON i1.intersection_id = rs.start_intersection_id
+                JOIN intersection i2 ON i2.intersection_id = rs.end_intersection_id
+                ORDER BY rs.segment_id
+                """
+            )
+            return [
+                {"id": r[0], "name": r[1], "distance_km": r[2], "speed_limit": r[3],
+                 "road_type": r[4], "capacity": r[5], "active": r[6],
+                 "a": r[7], "b": r[8],
+                 "a_lat": r[9], "a_lon": r[10], "b_lat": r[11], "b_lon": r[12]}
+                for r in cur.fetchall()
+            ]
+
+
+@router.get("/positions")
+def positions():
+    with get_pool().connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT * FROM latest_positions")
+            cols = [d[0] for d in cur.description]
+            rows = []
+            for r in cur.fetchall():
+                d = dict(zip(cols, r, strict=True))
+                if d.get("recorded_at") is not None:
+                    d["recorded_at"] = d["recorded_at"].isoformat()
+                rows.append(d)
+            return rows
