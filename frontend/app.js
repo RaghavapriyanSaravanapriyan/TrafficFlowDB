@@ -87,7 +87,7 @@ function tweenNum(el, to, suffix = "") {
   el.dataset.v = to;
   const t0 = performance.now();
   (function step(t) {
-    const k = Math.min((t - t0) / 600, 1);
+    const k = Math.max(0, Math.min((t - t0) / 600, 1));
     const v = from + (to - from) * (1 - Math.pow(1 - k, 3));
     el.textContent = (Number.isInteger(to) ? Math.round(v) : v.toFixed(2)) + suffix;
     if (k < 1) requestAnimationFrame(step);
