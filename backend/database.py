@@ -89,6 +89,15 @@ def ensure_readonly_role() -> None:
     Runs as the app owner; failures degrade gracefully (SQL Lab 503s)
     instead of taking the API down.
     """
+    import re
+
+    def _lit(value: str) -> str:
+        # DDL (ALTER ROLE … PASSWORD) takes no bind params — embed a literal.
+        # Password is operator-supplied env, still strictly validated + escaped.
+        if not re.fullmatch(r"[A-Za-z0-9_@.\-]{1,128}", value):
+            raise ValueError("READONLY_DB_PASSWORD has unsafe characters")
+        return "'" + value.replace("'", "''") + "'"
+
     try:
         with get_pool().connection() as conn:
             with conn.cursor() as cur:
@@ -96,8 +105,8 @@ def ensure_readonly_role() -> None:
                     "SELECT 1 FROM pg_roles WHERE rolname = %s", (RO_USER,))
                 if cur.fetchone() is None:
                     cur.execute(f'CREATE ROLE "{RO_USER}" WITH LOGIN')
-                cur.execute(f'ALTER ROLE "{RO_USER}" WITH PASSWORD %s',
-                            (RO_PASSWORD,))
+                cur.execute(
+                    f'ALTER ROLE "{RO_USER}" WITH PASSWORD {_lit(RO_PASSWORD)}')
                 cur.execute(f'GRANT CONNECT ON DATABASE trafficflowdb TO "{RO_USER}"')
                 cur.execute(f'GRANT USAGE ON SCHEMA public TO "{RO_USER}"')
                 cur.execute(
