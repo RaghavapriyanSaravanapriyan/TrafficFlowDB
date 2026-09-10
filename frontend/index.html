@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TrafficFlowDB — Real-time Traffic Intelligence</title>
+<meta name="description" content="Live traffic intelligence for Coimbatore: real-time GPS ingestion, congestion detection and traffic-aware routing on PostgreSQL." />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top"><span class="dot" id="statusDot"></span>TrafficFlowDB</a>
+    <nav>
+      <a href="#live">Live Map</a>
+      <a href="#planner">Routes</a>
+      <a href="#network">Network</a>
+    </nav>
+    <span class="live-pill" id="livePill">connecting…</span>
+  </div>
+</header>
+
+<main id="top">
+  <!-- Hero -->
+  <section class="hero">
+    <p class="eyebrow">Coimbatore · Live</p>
+    <h1>Traffic,<br />understood live.</h1>
+    <p class="sub">
+      Every vehicle streams GPS into PostgreSQL. The database scores congestion,
+      and Dijkstra re-routes you around it — in seconds.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="#live">Open live map</a>
+      <a class="btn" href="#planner">Plan a route</a>
+    </div>
+    <div class="hero-stats">
+      <div><strong id="hsVehicles">–</strong><span>active vehicles</span></div>
+      <div><strong id="hsFixes">–</strong><span>fixes / 5 min</span></div>
+      <div><strong id="hsCongested">–</strong><span>congested roads</span></div>
+      <div><strong id="hsQuery">–</strong><span>stats query ms</span></div>
+    </div>
+  </section>
+
+  <!-- Live map -->
+  <section class="card dark" id="live">
+    <div class="card-head">
+      <div>
+        <h2>Live map</h2>
+        <p>Roads glow with their real congestion state. Dots are vehicles, right now.</p>
+      </div>
+      <div class="legend">
+        <span><i class="sw low"></i>Free</span>
+        <span><i class="sw med"></i>Busy</span>
+        <span><i class="sw high"></i>Jammed</span>
+        <span><i class="sw route"></i>Your route</span>
+      </div>
+    </div>
+    <div id="map"></div>
+    <p class="hint">Tip: run the simulator with <code>--jam-segment 13</code> and watch the map — and the recommended route — react.</p>
+  </section>
+
+  <!-- Route planner -->
+  <section class="card" id="planner">
+    <div class="card-head">
+      <div>
+        <h2>Fastest route, not shortest.</h2>
+        <p>Edge weights are live travel times from the database. Congestion changes the answer.</p>
+      </div>
+    </div>
+    <div class="planner-grid">
+      <label>From
+        <select id="srcSel"></select>
+      </label>
+      <label>To
+        <select id="dstSel"></select>
+      </label>
+      <label class="check"><input type="checkbox" id="prioBox" /> Emergency priority <small>(free-flow weights)</small></label>
+      <button class="btn primary" id="routeBtn">Find best route</button>
+    </div>
+    <div id="routeOut" class="route-out" hidden></div>
+  </section>
+
+  <!-- Network -->
+  <section class="card" id="network">
+    <div class="card-head">
+      <div>
+        <h2>Network</h2>
+        <p>12 intersections · 19 segments · one row per segment, updated on every GPS fix.</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Segment</th><th>km</th><th>Avg km/h</th><th>Vehicles</th><th>Density</th><th>State</th></tr></thead>
+        <tbody id="netBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <p>TrafficFlowDB · FastAPI + PostgreSQL/PostGIS + Leaflet · Dijkstra on live travel-time weights</p>
+  </footer>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
