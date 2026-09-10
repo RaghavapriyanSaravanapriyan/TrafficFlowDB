@@ -10,10 +10,13 @@ CONGESTION_MULTIPLIER = {"LOW": 1.0, "MEDIUM": 1.5, "HIGH": 2.5}
 MIN_SPEED_KMH = 5.0
 
 
-def classify(avg_speed: float, density: float) -> str:
-    if avg_speed < 15 and density > 0.75:
+def classify(avg_speed: float, density: float,
+             high_speed: float = 15, high_density: float = 0.75,
+             med_speed: float = 30, med_density: float = 0.50) -> str:
+    """Mirrors calculate_segment_traffic(); pass live traffic_thresholds to match."""
+    if avg_speed < high_speed and density > high_density:
         return "HIGH"
-    if avg_speed < 30 or density > 0.50:
+    if avg_speed < med_speed or density > med_density:
         return "MEDIUM"
     return "LOW"
 

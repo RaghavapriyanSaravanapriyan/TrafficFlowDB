@@ -70,7 +70,9 @@ CREATE TABLE IF NOT EXISTS intersection (
     intersection_id SERIAL PRIMARY KEY,
     name            VARCHAR(100) NOT NULL UNIQUE,
     latitude        DOUBLE PRECISION NOT NULL CHECK (latitude  BETWEEN -90 AND 90),
-    longitude       DOUBLE PRECISION NOT NULL CHECK (longitude BETWEEN -180 AND 180)
+    longitude       DOUBLE PRECISION NOT NULL CHECK (longitude BETWEEN -180 AND 180),
+    scope           VARCHAR(20) NOT NULL DEFAULT 'metro'
+                    CHECK (scope IN ('metro', 'national'))
 );
 
 -- Graph edges. One row per physical road; the router treats every active
@@ -87,6 +89,8 @@ CREATE TABLE IF NOT EXISTS road_segment (
                            CHECK (road_type IN ('arterial', 'collector', 'local', 'highway')),
     capacity               INTEGER NOT NULL DEFAULT 40 CHECK (capacity > 0),
     is_active              BOOLEAN NOT NULL DEFAULT TRUE,
+    scope                  VARCHAR(20) NOT NULL DEFAULT 'metro'
+                           CHECK (scope IN ('metro', 'trunk', 'connector')),
     CHECK (start_intersection_id <> end_intersection_id)
 );
 
@@ -112,6 +116,18 @@ CREATE TABLE IF NOT EXISTS vehicle_position (
     speed_kmh   DOUBLE PRECISION NOT NULL CHECK (speed_kmh >= 0 AND speed_kmh <= 300),
     recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Congestion rulebook: singleton row edited live via PUT /api/config.
+-- The stored procedure reads these, so thresholds change without a deploy.
+CREATE TABLE IF NOT EXISTS traffic_thresholds (
+    id           INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    high_speed   DOUBLE PRECISION NOT NULL DEFAULT 15  CHECK (high_speed >= 0),
+    high_density DOUBLE PRECISION NOT NULL DEFAULT 0.75 CHECK (high_density >= 0),
+    med_speed    DOUBLE PRECISION NOT NULL DEFAULT 30  CHECK (med_speed >= 0),
+    med_density  DOUBLE PRECISION NOT NULL DEFAULT 0.50 CHECK (med_density >= 0)
+);
+
+INSERT INTO traffic_thresholds (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 -- ------------------------------------------------------ traffic analysis --
 -- Current snapshot: exactly one row per segment (upserted by the analyzer).
@@ -164,6 +180,24 @@ CREATE TABLE IF NOT EXISTS route_segment (
     UNIQUE (route_id, sequence_number),
     UNIQUE (route_id, segment_id)
 );
+
+-- Scope columns also enforced here (not only in CREATE TABLE above) so
+-- databases created by an older schema revision gain them before views.sql
+-- runs. Fully idempotent.
+ALTER TABLE intersection ADD COLUMN IF NOT EXISTS scope VARCHAR(20)
+    NOT NULL DEFAULT 'metro';
+ALTER TABLE road_segment ADD COLUMN IF NOT EXISTS scope VARCHAR(20)
+    NOT NULL DEFAULT 'metro';
+DO $$ BEGIN
+    ALTER TABLE intersection ADD CONSTRAINT chk_intersection_scope
+        CHECK (scope IN ('metro', 'national'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE road_segment ADD CONSTRAINT chk_segment_scope
+        CHECK (scope IN ('metro', 'trunk', 'connector'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ================================================================== indexes =
 -- Temporal high-frequency lookups: (vehicle, time) and (segment, time).

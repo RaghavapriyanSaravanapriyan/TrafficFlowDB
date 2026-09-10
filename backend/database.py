@@ -16,6 +16,7 @@ from .config import settings
 _pool: ConnectionPool | None = None
 
 SCHEMA_FILES = ("schema.sql", "views.sql", "triggers.sql", "procedures.sql")
+MIGRATION_FILES = ("migrate_india.sql",)
 
 
 def get_pool() -> ConnectionPool:
@@ -48,7 +49,7 @@ def wait_for_db(timeout: float = 60.0) -> None:
 
 
 def init_db(seed: bool = True) -> None:
-    """Create schema in dependency order, then load the real road network."""
+    """Create schema in dependency order, load the road network, run migrations."""
     base = pathlib.Path(__file__).resolve().parent.parent / "database"
     pool = get_pool()
     with pool.connection() as conn:
@@ -58,6 +59,9 @@ def init_db(seed: bool = True) -> None:
         if seed:
             with conn.cursor() as cur:
                 cur.execute((base / "seed_coimbatore.sql").read_text())
+        with conn.cursor() as cur:
+            for name in MIGRATION_FILES:
+                cur.execute((base / name).read_text())
 
 
 def close_pool() -> None:

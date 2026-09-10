@@ -3,10 +3,11 @@
 -- The API calls these instead of inlining analytics SQL, so congestion
 -- rules live in exactly one place: the database.
 --
--- Congestion rule (shared with the Python analyzer, kept in sync):
+-- Congestion rule (defaults; live values in traffic_thresholds, editable
+-- via PUT /api/config — the procedure reads them on every call):
 --   density = live_vehicles / capacity
---   HIGH   if avg_speed < 15 AND density > 0.75
---   MEDIUM if avg_speed < 30 OR  density > 0.50
+--   HIGH   if avg_speed < high_speed AND density > high_density
+--   MEDIUM if avg_speed < med_speed  OR  density > med_density
 --   LOW    otherwise
 -- ============================================================================
 
@@ -25,6 +26,10 @@ DECLARE
     v_limit    INTEGER;
     v_density  DOUBLE PRECISION;
     v_level    VARCHAR(10);
+    t_high_speed   DOUBLE PRECISION;
+    t_high_density DOUBLE PRECISION;
+    t_med_speed    DOUBLE PRECISION;
+    t_med_density  DOUBLE PRECISION;
 BEGIN
     SELECT capacity, speed_limit_kmh INTO v_capacity, v_limit
     FROM road_segment WHERE segment_id = p_segment_id;
@@ -32,6 +37,10 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Unknown segment %', p_segment_id;
     END IF;
+
+    SELECT high_speed, high_density, med_speed, med_density
+    INTO t_high_speed, t_high_density, t_med_speed, t_med_density
+    FROM traffic_thresholds WHERE id = 1;
 
     SELECT COUNT(DISTINCT vehicle_id), COALESCE(AVG(speed_kmh), v_limit)
     INTO v_count, v_avg
@@ -43,9 +52,9 @@ BEGIN
                       THEN v_count::double precision / v_capacity
                       ELSE 0 END;
 
-    IF v_avg < 15 AND v_density > 0.75 THEN
+    IF v_avg < t_high_speed AND v_density > t_high_density THEN
         v_level := 'HIGH';
-    ELSIF v_avg < 30 OR v_density > 0.50 THEN
+    ELSIF v_avg < t_med_speed OR v_density > t_med_density THEN
         v_level := 'MEDIUM';
     ELSE
         v_level := 'LOW';
