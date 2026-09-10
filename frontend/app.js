@@ -7,9 +7,9 @@ const POLL_MS = 2000;
 const COLORS = { LOW: "#30d158", MEDIUM: "#ffd60a", HIGH: "#ff453a" };
 
 const map = L.map("map", { zoomControl: true }).setView([11.03, 76.98], 12);
-L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
-  attribution: "&copy; OpenStreetMap &copy; CARTO",
+  attribution: "&copy; OpenStreetMap contributors",
 }).addTo(map);
 
 const segLines = new Map();   // segment_id -> L.polyline
