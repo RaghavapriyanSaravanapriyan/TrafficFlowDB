@@ -1,10 +1,10 @@
 from backend.services.geo import haversine_km, match_segment
 
 
-def test_haversine_gandhipuram_to_race_course():
-    # Real Coimbatore pair, ~2.3 km apart.
-    d = haversine_km(11.0183, 76.9678, 11.0070, 76.9860)
-    assert 2.0 < d < 2.7
+def test_haversine_delhi_to_agra():
+    # Real national pair, ~178 km apart straight-line.
+    d = haversine_km(28.6139, 77.2090, 27.1767, 78.0081)
+    assert 170 < d < 190
 
 
 def test_haversine_zero():

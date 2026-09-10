@@ -90,7 +90,7 @@ def inject_jam(segment_id: int | None = None, name: str | None = None,
 def rush_hour(per_segment: int = 8, n_segments: int = 12) -> dict:
     with get_pool().connection() as conn:
         segs = _segments_with_geo(
-            conn, "AND rs.scope IN ('trunk','metro') ORDER BY rs.capacity DESC LIMIT %s",
+            conn, "ORDER BY rs.capacity DESC LIMIT %s",
             (n_segments,))
     total = 0
     for seg in segs:

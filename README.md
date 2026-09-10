@@ -11,9 +11,9 @@ through the Under-the-hood terminal.
 > database acts as the central layer for collecting, managing, analyzing, and serving
 > continuously changing transportation data.
 
-Live network: **27 national highway hubs + 12 Coimbatore metro intersections,
-54 segments** — one connected graph, so `Delhi → Gandhipuram` routes in a single
-query. Traffic is generated live — no canned congestion.
+Live network: **26 national highway hubs, 32 trunk corridors** — one connected
+graph, so `Delhi → Kochi` (3,570 km) routes in a single query.
+Traffic is generated live — no canned congestion.
 
 ---
 
@@ -65,9 +65,9 @@ Fleet (CLI and/or server-side) → POST /api/gps/batch → bulk ingest:
                         → glass dashboard: SQL Lab, map, live SQL terminal
 ```
 
-`intersection` rows are nodes, `road_segment` rows are bidirectional edges
-(`scope`: `metro` / `trunk` / `connector`). Bulk ingest keeps round trips
-constant per batch: **~1,300–1,600 fixes/sec** measured (200-fix batch in ~110 ms).
+`intersection` rows are nodes, `road_segment` rows are bidirectional edges.
+Bulk ingest keeps round trips constant per batch:
+**~1,300–1,600 fixes/sec** measured (200-fix batch in ~110 ms).
 
 ## 4. Realistic traffic
 
@@ -80,9 +80,9 @@ re-plans on arrival:
 - **Driver personalities**: per-vehicle aggression factor × type factor
   (bus 0.85, emergency 1.3 and congestion-immune).
 - **Bus dwell**: buses pause 1–3 ticks at nodes (stops) with 40% probability.
-- **60/40 metro/trunk split** at spawn so both layers stay alive.
+- **Capacity-weighted spawn**: big corridors naturally carry more flow.
 
-At ~200+ vehicles the metro starts jamming on its own — no scripted congestion.
+At ~200+ vehicles the busy corridors start jamming on their own — no scripted congestion.
 
 ## 5. Database design (the core)
 
@@ -103,7 +103,7 @@ At ~200+ vehicles the metro starts jamming on its own — no scripted congestion
 a SELECT-only `traffic_ro` role provisioned at boot for the SQL Lab.
 
 Files: `database/schema.sql`, `views.sql`, `triggers.sql`, `procedures.sql`,
-`seed_coimbatore.sql`, `migrate_india.sql` — applied in order by `init_db()`.
+`migrate_india.sql`, `migrate_all_india.sql` — applied in order by `init_db()`.
 
 ## 6. Traffic analysis
 
@@ -140,7 +140,7 @@ Recommended starter queries (one click each, all verified live):
 
 1. **Congested right now** — live leaderboard from `live_traffic_summary`.
 2. **Slowest trunk corridors** — where the highways are bleeding speed.
-3. **Load by scope** — metro vs trunk segment/vehicle/speed rollup.
+3. **Load by scope** — trunk segment/vehicle/speed rollup.
 4. **Fleet mix, live** — car/bus/emergency counts + speeds from `latest_positions`.
 5. **Fixes per minute (15 min)** — ingest firehose rate from `gps_data`.
 6. **Hourly speed trend** — 12-hour network performance from `traffic_history`.
@@ -176,7 +176,7 @@ a bounded in-memory ring, so logging never slows ingest.
 ## 10. Demo script
 
 1. `docker compose up -d db` → `uvicorn backend.main:app` → `:8000`.
-2. Drawer → fleet → 200 vehicles → Apply (or CLI sim). India + metro light up.
+2. Drawer → fleet → 200 vehicles → Apply (or CLI sim). The corridors light up.
 3. SQL Lab → run **Congested right now** — your own query, live rows.
 4. Drawer → jam NH44 (or console scenario) — corridor turns red in seconds.
 5. `Route Delhi to Mumbai` — watch it swerve around the jam; check the
@@ -185,7 +185,7 @@ a bounded in-memory ring, so logging never slows ingest.
 ## 11. Metrics (measured)
 
 Bulk ingest **~1,300–1,600 fixes/s** (200-fix batch ≈ 110 ms, 1 refresh) ·
-stats ~5–15 ms under load · Dijkstra 39 nodes/54 edges ~0.05 ms ·
+stats ~5–15 ms under load · Dijkstra 26 nodes/32 edges ~0.05 ms ·
 dashboard tick 2 s (WS push + poll fallback).
 
 ## 12. Layout
@@ -199,7 +199,7 @@ backend/   main, database pool (+read-only role), runtime config, querylog,
 simulator/ OD-trip fleet (Vehicle mover, build_graph/plan_trip),
            vehicle_simulator.py (CLI), fleet.py (server FleetManager)
 frontend/  glass dashboard: index.html, styles.css, app.js (Leaflet)
-database/  schema, views, triggers, procedures, Coimbatore seed, India migration
+database/  schema, views, triggers, procedures, India migrations
 tests/     36 pytest tests: geo, congestion rules, Dijkstra, console parser, SQL guard
 ```
 
