@@ -63,18 +63,22 @@ def refresh_graph(conn) -> dict:
     return _graph_cache
 
 
-def _weight(seg: dict, priority: bool) -> tuple[float, float]:
-    """(weight_minutes, speed_used)."""
+def _weight(seg: dict, priority: bool, mode: str = "time") -> tuple[float, float]:
+    """(weight, speed_used). mode='time' minimizes ETA; 'distance' minimizes km
+    (ETA still computed from live speeds so both routes can be compared)."""
     if priority:
         speed = float(seg["speed_limit"])
     elif seg["vehicle_count"] > 0:
         speed = max(seg["avg_speed"], 5.0)
     else:
         speed = max(seg["speed_limit"] / CONGESTION_MULTIPLIER.get(seg["level"], 1.0), 5.0)
+    if mode == "distance":
+        return seg["distance_km"], speed
     return travel_time_min(seg["distance_km"], speed), speed
 
 
-def dijkstra(graph: dict, source: int, target: int, priority: bool = False) -> dict | None:
+def dijkstra(graph: dict, source: int, target: int, priority: bool = False,
+             mode: str = "time") -> dict | None:
     adj, segments = graph["adj"], graph["segments"]
     if source not in adj or target not in adj:
         return None
@@ -90,7 +94,7 @@ def dijkstra(graph: dict, source: int, target: int, priority: bool = False) -> d
         if u == target:
             break
         for v, sid in adj.get(u, []):
-            w, _ = _weight(segments[sid], priority)
+            w, _ = _weight(segments[sid], priority, mode)
             nd = d + w
             if nd < dist.get(v, float("inf")):
                 dist[v] = nd
@@ -114,23 +118,27 @@ def dijkstra(graph: dict, source: int, target: int, priority: bool = False) -> d
     legs = []
     for sid in seg_ids:
         seg = segments[sid]
-        w, speed = _weight(seg, priority)
+        _, speed = _weight(seg, priority, mode)
+        eta = travel_time_min(seg["distance_km"], speed)
         total_dist += seg["distance_km"]
         traffic_w += CONGESTION_MULTIPLIER.get(seg["level"], 1.0) * seg["distance_km"]
         legs.append({
             "segment_id": sid,
             "segment_name": seg["name"],
             "distance_km": round(seg["distance_km"], 3),
-            "estimated_min": round(w, 2),
+            "estimated_min": round(eta, 2),
             "speed_used_kmh": round(speed, 1),
             "congestion": seg["level"],
         })
     traffic_score = round(traffic_w / total_dist, 3) if total_dist else 0.0
+    total_min = round(dist[target], 2) if mode == "time" else round(
+        sum(leg["estimated_min"] for leg in legs), 2)
     return {
+        "mode": mode,
         "node_path": nodes,
         "segment_path": seg_ids,
         "legs": legs,
         "total_distance_km": round(total_dist, 3),
-        "estimated_time_min": round(dist[target], 2),
+        "estimated_time_min": total_min,
         "traffic_score": traffic_score,
     }

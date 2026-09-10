@@ -56,3 +56,20 @@ def test_totals_are_consistent():
     assert r["total_distance_km"] == 4.0
     assert r["estimated_time_min"] > 0
     assert abs(sum(l["estimated_min"] for l in r["legs"]) - r["estimated_time_min"]) < 0.05
+
+
+def test_distance_mode_picks_shortest_km():
+    r = dijkstra(_graph(), 1, 3, mode="distance")
+    assert r is not None
+    assert r["segment_path"] == [3]
+    assert r["total_distance_km"] == 3.0
+    # ...but its ETA (live speeds) is worse than the fastest route's.
+    fast = dijkstra(_graph(), 1, 3, mode="time")
+    assert r["estimated_time_min"] > fast["estimated_time_min"]
+    assert fast["total_distance_km"] > r["total_distance_km"]
+
+
+def test_modes_agree_when_free():
+    g = _graph(level_s3="LOW", avg_s3=50.0, count_s3=2)
+    assert dijkstra(g, 1, 3, mode="time")["segment_path"] == [3]
+    assert dijkstra(g, 1, 3, mode="distance")["segment_path"] == [3]

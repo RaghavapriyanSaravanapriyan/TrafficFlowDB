@@ -19,9 +19,11 @@ def request_route(body: RouteRequestIn):
         import time
         t0 = time.perf_counter()
         result = dijkstra(graph, body.source_id, body.destination_id,
-                          priority=body.priority)
+                          priority=body.priority, mode="time")
+        shortest = dijkstra(graph, body.source_id, body.destination_id,
+                            priority=body.priority, mode="distance")
         dms = (time.perf_counter() - t0) * 1000
-        if result is None:
+        if result is None or shortest is None:
             raise HTTPException(status_code=404, detail="No route found")
         with conn.cursor() as cur:
             cur.execute(
@@ -50,15 +52,34 @@ def request_route(body: RouteRequestIn):
                 )
     src = graph["nodes"][body.source_id]["name"]
     dst = graph["nodes"][body.destination_id]["name"]
+    comparison = {
+        "shortest": {
+            "total_distance_km": shortest["total_distance_km"],
+            "estimated_time_min": shortest["estimated_time_min"],
+            "segment_path": shortest["segment_path"],
+            "via": [leg["segment_name"] for leg in shortest["legs"]],
+        },
+        "fastest": {
+            "total_distance_km": result["total_distance_km"],
+            "estimated_time_min": result["estimated_time_min"],
+            "segment_path": result["segment_path"],
+        },
+        "saved_min": round(shortest["estimated_time_min"] - result["estimated_time_min"], 2),
+        "extra_km": round(result["total_distance_km"] - shortest["total_distance_km"], 3),
+        "same_route": shortest["segment_path"] == result["segment_path"],
+    }
     querylog.log(
         "ROUTE",
-        f"Dijkstra({len(graph['nodes'])} nodes, {len(graph['segments'])} edges, "
-        "w = dist/live_speed) + INSERT route_request/route/route_segment[]",
+        f"Dijkstra×2 time+distance ({len(graph['nodes'])} nodes, {len(graph['segments'])} edges) "
+        "+ INSERT route_request/route/route_segment[]",
         dms,
-        f"{src} → {dst}: {result['estimated_time_min']} min, {result['total_distance_km']} km",
+        f"{src} → {dst}: fastest {result['estimated_time_min']} min / "
+        f"{result['total_distance_km']} km vs shortest {shortest['estimated_time_min']} min / "
+        f"{shortest['total_distance_km']} km",
     )
     return {"request_id": req_id, "route_id": route_id,
-            "source": src, "destination": dst, **result}
+            "source": src, "destination": dst,
+            "comparison": comparison, **result}
 
 
 @router.get("/history")

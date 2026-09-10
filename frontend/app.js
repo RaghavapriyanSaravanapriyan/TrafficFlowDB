@@ -262,6 +262,18 @@ function drawRoute(segIds, fly = true) {
   if (fly && bounds.length) map.flyToBounds(bounds, { padding: [60, 60], duration: 1.2 });
 }
 function routeHTML(r) {
+  const c = r.comparison;
+  let cmp = "";
+  if (c) {
+    cmp = c.same_route
+      ? `<p class="verdict">The fastest route <b>is</b> the shortest one right now — nothing to beat.</p>`
+      : `<div class="versus">
+          <div class="vs-card"><span>Shortest</span><strong>${c.shortest.total_distance_km} km</strong><em>${c.shortest.estimated_time_min} min</em></div>
+          <div class="vs-mid">vs</div>
+          <div class="vs-card fast"><span>Fastest ★</span><strong>${r.total_distance_km} km</strong><em>${r.estimated_time_min} min</em></div>
+        </div>
+        <p class="verdict">Fastest saves <b>${c.saved_min} min</b> for <b>+${c.extra_km} km</b> extra road.</p>`;
+  }
   return `
     <div class="route-meta">
       <div><strong>${r.estimated_time_min} min</strong><span>estimated travel time</span></div>
@@ -269,6 +281,7 @@ function routeHTML(r) {
       <div><strong>${r.traffic_score}×</strong><span>traffic penalty</span></div>
       <div><strong>${escapeHtml(r.source)} → ${escapeHtml(r.destination)}</strong><span>recommended route</span></div>
     </div>
+    ${cmp}
     <ol class="legs">
       ${r.legs.map((l, i) => `<li><span class="pill ${l.congestion}">${l.congestion}</span>
         <span><b>${i + 1}.</b> ${escapeHtml(l.segment_name)} — ${l.distance_km} km, ~${l.estimated_min} min</span></li>`).join("")}
