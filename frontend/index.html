@@ -1,81 +1,137 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>TrafficFlowDB — Real-time Traffic Intelligence</title>
-<meta name="description" content="Live traffic intelligence for Coimbatore: real-time GPS ingestion, congestion detection and traffic-aware routing on PostgreSQL." />
+<title>TrafficFlowDB — Real-time Traffic Intelligence · India</title>
+<meta name="description" content="Live traffic intelligence across India: real-time GPS ingestion into PostgreSQL, congestion detection and traffic-aware routing — with the database internals streaming live." />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 
-<header class="nav">
+<div class="aurora" aria-hidden="true"><i class="b1"></i><i class="b2"></i><i class="b3"></i></div>
+<div class="wipe" id="wipe" aria-hidden="true"></div>
+
+<header class="nav glass">
   <div class="nav-inner">
     <a class="brand" href="#top"><span class="dot" id="statusDot"></span>TrafficFlowDB</a>
     <nav>
+      <a href="#console">Console</a>
       <a href="#live">Live Map</a>
-      <a href="#planner">Routes</a>
+      <a href="#underhood">Under the hood</a>
       <a href="#network">Network</a>
     </nav>
-    <span class="live-pill" id="livePill">connecting…</span>
+    <div class="nav-actions">
+      <button class="icon-btn" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">◐</button>
+      <button class="btn small" id="customBtn">Customize</button>
+      <span class="live-pill" id="livePill">connecting…</span>
+    </div>
   </div>
 </header>
 
 <main id="top">
   <!-- Hero -->
-  <section class="hero">
-    <p class="eyebrow">Coimbatore · Live</p>
+  <section class="hero reveal">
+    <p class="eyebrow">India · Live</p>
     <h1>Traffic,<br />understood live.</h1>
     <p class="sub">
       Every vehicle streams GPS into PostgreSQL. The database scores congestion,
-      and Dijkstra re-routes you around it — in seconds.
+      and Dijkstra re-routes you around it — watch every query happen below, in real time.
     </p>
     <div class="cta">
       <a class="btn primary" href="#live">Open live map</a>
-      <a class="btn" href="#planner">Plan a route</a>
+      <a class="btn" href="#console">Ask the console</a>
     </div>
     <div class="hero-stats">
       <div><strong id="hsVehicles">–</strong><span>active vehicles</span></div>
       <div><strong id="hsFixes">–</strong><span>fixes / 5 min</span></div>
       <div><strong id="hsCongested">–</strong><span>congested roads</span></div>
+      <div><strong id="hsRoutes">–</strong><span>routes computed</span></div>
       <div><strong id="hsQuery">–</strong><span>stats query ms</span></div>
     </div>
   </section>
 
+  <!-- Console -->
+  <section class="card glass reveal" id="console">
+    <div class="card-head">
+      <div>
+        <h2>Console</h2>
+        <p>Type a question, get a live answer from the database. Press <kbd>Ctrl K</kbd> anywhere to jump here.</p>
+      </div>
+    </div>
+    <div class="console-box">
+      <span class="prompt">▸</span>
+      <input id="cmdInput" type="text" autocomplete="off" spellcheck="false"
+             placeholder='Try "Route Delhi to Mumbai" or "Jam Sathy Rd"…' />
+      <button class="btn primary" id="cmdRun">Run</button>
+    </div>
+    <div class="chips" id="cmdChips"></div>
+    <div id="cmdOut" class="cmd-out" hidden></div>
+  </section>
+
   <!-- Live map -->
-  <section class="card dark" id="live">
+  <section class="card dark glass reveal" id="live">
     <div class="card-head">
       <div>
         <h2>Live map</h2>
-        <p>Roads glow with their real congestion state. Dots are vehicles, right now.</p>
+        <p>27 national hubs + the Coimbatore metro. Roads glow with real congestion; dots are vehicles, right now.</p>
       </div>
-      <div class="legend">
-        <span><i class="sw low"></i>Free</span>
-        <span><i class="sw med"></i>Busy</span>
-        <span><i class="sw high"></i>Jammed</span>
-        <span><i class="sw route"></i>Your route</span>
+      <div class="map-tools">
+        <div class="seg-toggle" role="tablist">
+          <button class="active" id="viewIndia">India</button>
+          <button id="viewCbe">Coimbatore</button>
+        </div>
+        <div class="legend">
+          <span><i class="sw low"></i>Free</span>
+          <span><i class="sw med"></i>Busy</span>
+          <span><i class="sw high"></i>Jammed</span>
+          <span><i class="sw route"></i>Your route</span>
+        </div>
       </div>
     </div>
     <div id="map"></div>
-    <p class="hint">Tip: run the simulator with <code>--jam-segment 13</code> and watch the map — and the recommended route — react.</p>
+  </section>
+
+  <!-- Under the hood -->
+  <section class="card dark glass reveal" id="underhood">
+    <div class="card-head">
+      <div>
+        <h2>Under the hood</h2>
+        <p>Every query the backend runs against PostgreSQL, streaming live. This is the database thinking.</p>
+      </div>
+      <div class="term-tools">
+        <div class="term-filters" id="logFilters">
+          <button data-f="ALL" class="active">All</button>
+          <button data-f="SQL">SQL</button>
+          <button data-f="ROUTE">Routes</button>
+          <button data-f="SCENARIO">Scenarios</button>
+          <button data-f="CMD">Console</button>
+        </div>
+        <button class="mini-btn" id="logPause">Pause</button>
+        <button class="mini-btn" id="logClear">Clear</button>
+      </div>
+    </div>
+    <div class="term-stats">
+      <span><b id="lgCount">0</b> queries logged</span>
+      <span>avg <b id="lgAvg">0 ms</b></span>
+      <span>dijkstra <b id="lgRoute">0 ms</b></span>
+      <span class="term-ok">● connected</span>
+    </div>
+    <div id="terminal" class="terminal" aria-live="off"></div>
   </section>
 
   <!-- Route planner -->
-  <section class="card" id="planner">
+  <section class="card glass reveal" id="planner">
     <div class="card-head">
       <div>
         <h2>Fastest route, not shortest.</h2>
-        <p>Edge weights are live travel times from the database. Congestion changes the answer.</p>
+        <p>Edge weights are live travel times from the database — Delhi to Gandhipuram in one query.</p>
       </div>
     </div>
     <div class="planner-grid">
-      <label>From
-        <select id="srcSel"></select>
-      </label>
-      <label>To
-        <select id="dstSel"></select>
-      </label>
+      <label>From <select id="srcSel"></select></label>
+      <label>To <select id="dstSel"></select></label>
       <label class="check"><input type="checkbox" id="prioBox" /> Emergency priority <small>(free-flow weights)</small></label>
       <button class="btn primary" id="routeBtn">Find best route</button>
     </div>
@@ -83,16 +139,21 @@
   </section>
 
   <!-- Network -->
-  <section class="card" id="network">
+  <section class="card glass reveal" id="network">
     <div class="card-head">
       <div>
         <h2>Network</h2>
-        <p>12 intersections · 19 segments · one row per segment, updated on every GPS fix.</p>
+        <p id="netSub">39 intersections · 54 segments · one row per segment, updated on every GPS fix.</p>
+      </div>
+      <div class="seg-toggle light" role="tablist">
+        <button class="active" data-scope="ALL">All</button>
+        <button data-scope="metro">Metro</button>
+        <button data-scope="trunk">Trunk</button>
       </div>
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Segment</th><th>km</th><th>Avg km/h</th><th>Vehicles</th><th>Density</th><th>State</th></tr></thead>
+        <thead><tr><th>Segment</th><th>Scope</th><th>km</th><th>Avg km/h</th><th>Vehicles</th><th>Density</th><th>State</th></tr></thead>
         <tbody id="netBody"></tbody>
       </table>
     </div>
@@ -102,6 +163,49 @@
     <p>TrafficFlowDB · FastAPI + PostgreSQL/PostGIS + Leaflet · Dijkstra on live travel-time weights</p>
   </footer>
 </main>
+
+<!-- Customize drawer -->
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer glass" id="drawer" aria-label="Customize">
+  <div class="drawer-head">
+    <h3>Customize</h3>
+    <button class="icon-btn" id="drawerClose" aria-label="Close">✕</button>
+  </div>
+
+  <h4>Live pipeline</h4>
+  <label class="slider">Traffic window <b id="winVal">5 min</b>
+    <input type="range" id="winRange" min="1" max="15" step="1" value="5" />
+  </label>
+  <label class="slider">Dashboard refresh <b id="pollVal">2.0 s</b>
+    <input type="range" id="pollRange" min="1" max="10" step="0.5" value="2" />
+  </label>
+
+  <h4>Congestion rulebook</h4>
+  <div class="thresh-grid">
+    <label>HIGH below <input type="number" id="thHs" step="1" /> km/h</label>
+    <label>HIGH above <input type="number" id="thHd" step="0.05" min="0" max="5" /> density</label>
+    <label>MED below <input type="number" id="thMs" step="1" /> km/h</label>
+    <label>MED above <input type="number" id="thMd" step="0.05" min="0" max="5" /> density</label>
+  </div>
+  <button class="btn primary wide" id="cfgApply">Apply configuration</button>
+  <p class="drawer-note" id="cfgNote">Thresholds live in PostgreSQL (<code>traffic_thresholds</code>) — applying rewrites them and recomputes every segment.</p>
+
+  <h4>Traffic scenarios</h4>
+  <label>Jam a road
+    <select id="jamSel"></select>
+  </label>
+  <div class="row">
+    <label>Vehicles <input type="number" id="jamCount" value="30" min="1" max="200" /></label>
+    <button class="btn" id="jamFire">Cause jam</button>
+  </div>
+  <div class="row">
+    <button class="btn" id="rushFire">Rush hour everywhere</button>
+    <button class="btn danger" id="resetFire">Reset to free flow</button>
+  </div>
+  <p class="drawer-note">Scenarios inject through the normal GPS ingest path — the map, logs and router react exactly like real traffic.</p>
+</aside>
+
+<div class="toast" id="toast" hidden></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="app.js"></script>
