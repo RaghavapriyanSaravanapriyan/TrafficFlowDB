@@ -96,12 +96,13 @@ class Vehicle:
         self.seg_by_id = seg_by_id or {s["id"]: s for s in segments}
         if jam_segment:
             pool = [s for s in segments if s["id"] == jam_segment] or segments
+            self.seg = random.choice(pool)
         else:
-            metro = [s for s in segments if s.get("scope", "metro") == "metro"]
-            trunk = [s for s in segments if s.get("scope") == "trunk"]
-            pool = metro if random.random() < 0.6 else (trunk or metro)
-            pool = pool or segments
-        self.seg = random.choice(pool)
+            # Capacity-weighted spawn: big corridors naturally carry more flow.
+            self.seg = random.choices(
+                segments,
+                weights=[max(s.get("capacity", 40), 1) for s in segments],
+                k=1)[0]
         self.t = random.random()
         self.fwd = random.random() < 0.5
         self.speed = self.seg["speed_limit"] * random.uniform(0.5, 0.9)

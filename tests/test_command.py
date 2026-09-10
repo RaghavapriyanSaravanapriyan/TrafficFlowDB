@@ -4,10 +4,9 @@ NODES = [
     {"id": 101, "name": "Delhi"},
     {"id": 124, "name": "Mumbai"},
     {"id": 110, "name": "Kolkata"},
-    {"id": 1, "name": "Gandhipuram"},
-    {"id": 6, "name": "Singanallur"},
-    {"id": 4, "name": "Peelamedu"},
-    {"id": 35 - 15, "name": "Sathy Rd (Saravanampatti - Peelamedu)"},
+    {"id": 114, "name": "Chennai"},
+    {"id": 115, "name": "Bengaluru"},
+    {"id": 119, "name": "Hyderabad"},
 ]
 
 
@@ -18,7 +17,7 @@ def test_route_full_form():
 
 
 def test_route_bare_form():
-    a = interpret("Gandhipuram to Singanallur", NODES)
+    a = interpret("Chennai to Bengaluru", NODES)
     assert a["action"] == "route"
 
 
@@ -39,17 +38,17 @@ def test_ambiguous_route_clarifies():
 
 
 def test_traffic_request():
-    a = interpret("Traffic on Sathy Rd", NODES)
+    a = interpret("Traffic on NH48", NODES)
     assert a["action"] == "traffic_request"
 
 
 def test_jam_request_with_count():
-    a = interpret("Jam Peelamedu 40", NODES)
+    a = interpret("Jam NH44 40", NODES)
     assert a["action"] == "jam_request" and a["count"] == 40
 
 
 def test_jam_request_default_count():
-    a = interpret("jam Peelamedu", NODES)
+    a = interpret("jam Hyderabad", NODES)
     assert a["count"] == 30
 
 

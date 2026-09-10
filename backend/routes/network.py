@@ -47,9 +47,12 @@ def segments():
 
 @router.get("/positions")
 def positions():
+    # Only live dots: fixes older than ~1 min are stale (retired vehicles
+    # vanish from the map instead of haunting it forever).
     with get_pool().connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT * FROM latest_positions")
+            cur.execute(
+                "SELECT * FROM latest_positions WHERE recorded_at > NOW() - INTERVAL '60 seconds'")
             cols = [d[0] for d in cur.description]
             rows = []
             for r in cur.fetchall():

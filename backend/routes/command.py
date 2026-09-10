@@ -20,11 +20,11 @@ router = APIRouter(prefix="/api/command", tags=["command"])
 
 EXAMPLES = [
     "Route Delhi to Mumbai",
-    "Route Gandhipuram to Singanallur",
-    "Delhi to Chennai",
-    "Traffic on Avinashi Rd",
+    "Route Mumbai to Chennai",
+    "Kolkata to Guwahati",
+    "Traffic on NH48",
     "Where is it jammed?",
-    "Jam Sathy Rd",
+    "Jam NH44",
     "Rush hour",
     "Stats",
     "Reset",

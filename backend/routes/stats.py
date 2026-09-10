@@ -14,9 +14,12 @@ def overview():
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM vehicle WHERE status = 'active'")
             fleet = int(cur.fetchone()[0])
+            # "Live" = heard from within ~15 ticks. last_seen is maintained by
+            # the position trigger (single ingest) and bulk touch (batch path),
+            # so spawn/retire reflects here in seconds, not minutes.
             cur.execute(
-                "SELECT COUNT(DISTINCT vehicle_id) FROM vehicle_position "
-                "WHERE recorded_at > NOW() - INTERVAL '5 minutes'"
+                "SELECT COUNT(*) FROM vehicle "
+                "WHERE last_seen > NOW() - INTERVAL '30 seconds'"
             )
             vehicles = int(cur.fetchone()[0])
             cur.execute("SELECT COUNT(*) FROM gps_data")
